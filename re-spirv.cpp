@@ -13,17 +13,39 @@
 // TODO: Replace stderr handling with a consumer printer class.
 
 namespace respv {
-    // Optimizer
+    // Common.
 
-    Optimizer::Optimizer() {
-        // Empty.
+    static uint32_t addToList(uint32_t nodeIndex, uint32_t listIndex, std::vector<ListNode> &listNodes) {
+        listNodes.emplace_back(nodeIndex, listIndex);
+        return uint32_t(listNodes.size() - 1);
     }
 
-    Optimizer::Optimizer(const void *data, size_t size) {
-        parse(data, size);
+    static bool SpvHasOperandRange(SpvOp opCode, uint32_t &operandWordStart, uint32_t &operandWordCount) {
+        switch (opCode) {
+        case SpvOpNot:
+        case SpvOpBitcast:
+            operandWordStart = 3;
+            operandWordCount = 1;
+            return true;
+        case SpvOpShiftRightLogical:
+        case SpvOpShiftRightArithmetic:
+        case SpvOpShiftLeftLogical:
+        case SpvOpBitwiseOr:
+        case SpvOpBitwiseAnd:
+        case SpvOpBitwiseXor:
+            operandWordStart = 3;
+            operandWordCount = 2;
+            return true;
+        default:
+            operandWordStart = 0;
+            operandWordCount = 0;
+            return false;
+        }
     }
 
-    bool Optimizer::parse(const void *data, size_t size) {
+    // Shader.
+
+    bool Shader::parse(const void *data, size_t size) {
         assert(data != nullptr);
         assert((size % sizeof(uint32_t) == 0) && "Size of data must be aligned to the word size.");
 
@@ -31,8 +53,11 @@ namespace respv {
         spirvWordCount = size / sizeof(uint32_t);
         specConstants.clear();
         specConstantsTargetIds.clear();
-        decoratorIndices.clear();
         specIdToConstantIndex.clear();
+        results.clear();
+        decorators.clear();
+        blocks.clear();
+        listNodes.clear();
 
         const uint32_t startingWordIndex = 5;
         if (spirvWordCount < startingWordIndex) {
@@ -51,16 +76,19 @@ namespace respv {
         }
 
         const uint32_t idBound = spirvWords[3];
-        resultIndices.resize(idBound, UINT32_MAX);
-        resultIndices.shrink_to_fit();
+        results.resize(idBound, Result());
 
         // Parse all instructions.
+        Block block;
         SpvOp opCode = SpvOpNop;
         uint16_t wordCount = 0;
         uint32_t wordIndex = startingWordIndex;
         uint32_t resultId = 0;
         bool hasResult = false;
         bool hasType = false;
+        uint32_t operandWordStart = 0;
+        uint32_t operandWordCount = 0;
+        uint32_t instructionIndex = 0;
         while (wordIndex < spirvWordCount) {
             opCode = SpvOp(spirvWords[wordIndex] & 0xFFFFU);
             wordCount = (spirvWords[wordIndex] >> 16U) & 0xFFFFU;
@@ -74,17 +102,56 @@ namespace respv {
                     return false;
                 }
 
-                assert(resultIndices[resultId] == UINT32_MAX && "Two instructions can't write to the same result.");
-                resultIndices[resultId] = wordIndex;
+                assert(results[resultId].wordIndex == UINT32_MAX && "Two instructions can't write to the same result.");
+                results[resultId].instructionIndex = instructionIndex;
+                results[resultId].wordIndex = wordIndex;
+            }
+            else {
+                resultId = UINT32_MAX;
             }
 
             switch (opCode) {
             case SpvOpDecorate:
-                decoratorIndices.emplace_back(wordIndex);
+                decorators.emplace_back(wordIndex);
+                break;
+            case SpvOpLabel:
+                block.labelIndex = wordIndex;
+                break;
+            case SpvOpBranch:
+            case SpvOpBranchConditional:
+            case SpvOpSwitch:
+            case SpvOpReturn:
+            case SpvOpReturnValue:
+            case SpvOpKill:
+            case SpvOpUnreachable:
+                block.terminationIndex = wordIndex;
+
+                if (block.labelIndex == UINT32_MAX) {
+                    fprintf(stderr, "SPIR-V Parsing error. Encountered a termination instruction but no label was defined previously.\n");
+                    return false;
+                }
+                else {
+                    blocks.emplace_back(block);
+                    block.labelIndex = UINT32_MAX;
+                    block.terminationIndex = UINT32_MAX;
+                }
+
                 break;
             default:
                 // Ignore the rest.
                 break;
+            }
+
+            if ((resultId != UINT32_MAX) && SpvHasOperandRange(opCode, operandWordStart, operandWordCount)) {
+                for (uint32_t i = 0; i < operandWordCount; i++) {
+                    uint32_t operandId = spirvWords[wordIndex + operandWordStart + i];
+                    if (operandId >= idBound) {
+                        fprintf(stderr, "SPIR-V Parsing error. Invalid Operand ID: %u.\n", operandId);
+                        return false;
+                    }
+
+                    results[operandId].adjacentListIndex = addToList(resultId, results[operandId].adjacentListIndex, listNodes);
+                }
             }
 
             if (wordCount == 0) {
@@ -93,23 +160,24 @@ namespace respv {
             }
 
             wordIndex += wordCount;
+            instructionIndex++;
         }
 
         // Parse all decorations once all instructions have been parsed.
         std::vector<uint32_t> specValues;
-        for (uint32_t wordIndex : decoratorIndices) {
-            uint32_t decoration = spirvWords[wordIndex + 2];
+        for (const Decorator &decorator : decorators) {
+            uint32_t decoration = spirvWords[decorator.wordIndex + 2];
             switch (decoration) {
             case SpvDecorationSpecId: {
-                uint32_t targetId = spirvWords[wordIndex + 1];
-                uint32_t specWordIndex = resultIndices[targetId];
-                if (specWordIndex == UINT32_MAX) {
+                uint32_t targetId = spirvWords[decorator.wordIndex + 1];
+                const Result &specResult = results[targetId];
+                if (specResult.wordIndex == UINT32_MAX) {
                     fprintf(stderr, "SPIR-V Parsing error. SpvDecorationSpecId targets %u which hasn't been defined before it.\n", targetId);
                     return false;
                 }
 
-                SpvOp specOpCode = SpvOp(spirvWords[specWordIndex] & 0xFFFFU);
-                uint32_t specOpWordCount = (spirvWords[specWordIndex] >> 16U) & 0xFFFFU;
+                SpvOp specOpCode = SpvOp(spirvWords[specResult.wordIndex] & 0xFFFFU);
+                uint32_t specOpWordCount = (spirvWords[specResult.wordIndex] >> 16U) & 0xFFFFU;
                 switch (specOpCode) {
                 case SpvOpSpecConstantTrue:
                     specValues.resize(1);
@@ -121,7 +189,7 @@ namespace respv {
                     break;
                 case SpvOpSpecConstant:
                     specValues.resize(specOpWordCount - 3);
-                    memcpy(specValues.data(), &spirvWords[specWordIndex + 3], sizeof(uint32_t) * specValues.size());
+                    memcpy(specValues.data(), &spirvWords[specResult.wordIndex + 3], sizeof(uint32_t) * specValues.size());
                     break;
                 case SpvOpSpecConstantComposite:
                     fprintf(stderr, "SPIR-V Parsing error. SpvOpSpecConstantComposite is not supported yet.\n");
@@ -134,7 +202,7 @@ namespace respv {
                     return false;
                 }
 
-                uint32_t constantId = spirvWords[wordIndex + 3];
+                uint32_t constantId = spirvWords[decorator.wordIndex + 3];
                 specConstants.emplace_back(constantId, specValues);
                 specConstantsTargetIds.emplace_back(targetId);
                 specIdToConstantIndex.resize(std::max(specIdToConstantIndex.size(), size_t(constantId + 1)), UINT32_MAX);
@@ -145,59 +213,81 @@ namespace respv {
                 break;
             }
         }
-        
+
         // Indicate the data has been parsed and filled in correctly.
-        filledData = true;
+        valid = true;
+
+        for (uint32_t specTargetId : specConstantsTargetIds) {
+            Debugger::printTraversalFrom(*this, specTargetId);
+        }
 
         return true;
     }
 
+    bool Shader::empty() const {
+        return !valid;
+    }
+
+    // Optimizer.
+
+    Optimizer::Optimizer() {
+        // Empty.
+    }
+
+    Optimizer::Optimizer(const void *data, size_t size) {
+        parse(data, size);
+    }
+
+    bool Optimizer::parse(const void *data, size_t size) {
+        return shader.parse(data, size);
+    }
+
     bool Optimizer::empty() const {
-        return !filledData;
+        return shader.empty();
     }
 
     const std::vector<SpecConstant> &Optimizer::getSpecConstants() const {
-        return specConstants;
+        return shader.specConstants;
     }
 
     bool Optimizer::run(const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData) const {
         assert(!empty());
 
-        optimizedData.resize(spirvWordCount * sizeof(uint32_t));
-        memcpy(optimizedData.data(), spirvWords, optimizedData.size());
+        optimizedData.resize(shader.spirvWordCount * sizeof(uint32_t));
+        memcpy(optimizedData.data(), shader.spirvWords, optimizedData.size());
         
         // Patch in specialization constants.
         uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(optimizedData.data());
         for (uint32_t i = 0; i < newSpecConstantCount; i++) {
             const SpecConstant &newSpecConstant = newSpecConstants[i];
-            if (newSpecConstant.specId >= specIdToConstantIndex.size()) {
+            if (newSpecConstant.specId >= shader.specIdToConstantIndex.size()) {
                 fprintf(stderr, "Optimization error. Spec Id %u was not detected in the shader.\n", newSpecConstant.specId);
                 return false;
             }
 
-            uint32_t specIndex = specIdToConstantIndex[newSpecConstant.specId];
+            uint32_t specIndex = shader.specIdToConstantIndex[newSpecConstant.specId];
             if (specIndex == UINT32_MAX) {
                 fprintf(stderr, "Optimization error. Spec Id %u was not detected in the shader.\n", newSpecConstant.specId);
                 return false;
             }
 
-            const SpecConstant &specConstant = specConstants[specIndex];
+            const SpecConstant &specConstant = shader.specConstants[specIndex];
             if (specConstant.values.size() != newSpecConstant.values.size()) {
                 fprintf(stderr, "Optimization error. Spec Id %u expects %zu values but %zu were provided. The value count must be the exact same.\n", newSpecConstant.specId, specConstant.values.size(), newSpecConstant.values.size());
                 return false;
             }
 
-            uint32_t targetId = specConstantsTargetIds[specIndex];
-            uint32_t specWordIndex = resultIndices[targetId];
-            SpvOp specOpCode = SpvOp(spirvWords[specWordIndex] & 0xFFFFU);
+            uint32_t targetId = shader.specConstantsTargetIds[specIndex];
+            const Result &specResult = shader.results[targetId];
+            SpvOp specOpCode = SpvOp(shader.spirvWords[specResult.wordIndex] & 0xFFFFU);
             switch (specOpCode) {
             case SpvOpSpecConstantTrue:
             case SpvOpSpecConstantFalse:
-                optimizedWords[specWordIndex] = (newSpecConstant.values[0] ? SpvOpConstantTrue : SpvOpConstantFalse) | (optimizedWords[specWordIndex] & 0xFFFF0000U);
+                optimizedWords[specResult.wordIndex] = (newSpecConstant.values[0] ? SpvOpConstantTrue : SpvOpConstantFalse) | (optimizedWords[specResult.wordIndex] & 0xFFFF0000U);
                 break;
             case SpvOpSpecConstant:
-                optimizedWords[specWordIndex] = SpvOpConstant | (optimizedWords[specWordIndex] & 0xFFFF0000U);
-                memcpy(&optimizedWords[specWordIndex + 3], newSpecConstant.values.data(), sizeof(uint32_t) * specConstant.values.size());
+                optimizedWords[specResult.wordIndex] = SpvOpConstant | (optimizedWords[specResult.wordIndex] & 0xFFFF0000U);
+                memcpy(&optimizedWords[specResult.wordIndex + 3], newSpecConstant.values.data(), sizeof(uint32_t) * specConstant.values.size());
                 break;
             default:
                 fprintf(stderr, "Optimization error. Can't patch opCode %u.\n", specOpCode);
@@ -206,5 +296,18 @@ namespace respv {
         }
 
         return true;
+    }
+
+    // Debugger.
+
+    void Debugger::printTraversalFrom(const Shader &shader, uint32_t resultId) {
+        printf("Adjacent to %d:\n", resultId);
+
+        uint32_t listIndex = shader.results[resultId].adjacentListIndex;
+        while (listIndex != UINT32_MAX) {
+            uint32_t adjacentResultId = shader.listNodes[listIndex].nodeIndex;
+            printf("\t%d\n", adjacentResultId);
+            listIndex = shader.listNodes[listIndex].nextListIndex;
+        }
     }
 };

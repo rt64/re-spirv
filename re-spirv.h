@@ -20,15 +20,65 @@ namespace respv {
         }
     };
 
-    struct Optimizer {
+    struct Result {
+        uint32_t instructionIndex = UINT32_MAX;
+        uint32_t wordIndex = UINT32_MAX;
+        uint32_t adjacentListIndex = UINT32_MAX;
+
+        Result() {
+            // Empty constructor.
+        }
+
+        Result(uint32_t wordIndex) {
+            this->wordIndex = wordIndex;
+        }
+    };
+
+    struct Decorator {
+        uint32_t wordIndex = UINT32_MAX;
+
+        Decorator(uint32_t wordIndex) {
+            this->wordIndex = wordIndex;
+        }
+    };
+
+    struct Block {
+        uint32_t labelIndex = UINT32_MAX;
+        uint32_t terminationIndex = UINT32_MAX;
+    };
+
+    struct ListNode {
+        uint32_t nodeIndex = UINT32_MAX;
+        uint32_t nextListIndex = UINT32_MAX;
+
+        ListNode() {
+            // Empty constructor.
+        }
+
+        ListNode(uint32_t nodeIndex, uint32_t nextListIndex) {
+            this->nodeIndex = nodeIndex;
+            this->nextListIndex = nextListIndex;
+        }
+    };
+
+    struct Shader {
         const uint32_t *spirvWords = nullptr;
         size_t spirvWordCount = 0;
-        std::vector<SpecConstant> specConstants; // Size is however many spec constants were found.
-        std::vector<uint32_t> specConstantsTargetIds; // Size is however many spec constants were found.
-        std::vector<uint32_t> specIdToConstantIndex; // Size will fit whatever was the biggest spec Id that was found.
-        std::vector<uint32_t> resultIndices; // Size is the SPIR-V Id Bound.
-        std::vector<uint32_t> decoratorIndices; // Size is however many decorations were found.
-        bool filledData = false;
+        std::vector<SpecConstant> specConstants;
+        std::vector<uint32_t> specConstantsTargetIds;
+        std::vector<uint32_t> specIdToConstantIndex;
+        std::vector<Result> results;
+        std::vector<Decorator> decorators;
+        std::vector<Block> blocks;
+        std::vector<ListNode> listNodes;
+        bool valid = false;
+
+        bool parse(const void *data, size_t size);
+        bool empty() const;
+    };
+
+    struct Optimizer {
+        Shader shader;
 
         // Default empty constructor.
         Optimizer();
@@ -47,5 +97,9 @@ namespace respv {
 
         // Run the optimizer with the specified values for specialization constants and return the optimized data.
         bool run(const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData) const;
+    };
+
+    struct Debugger {
+        static void printTraversalFrom(const Shader &shader, uint32_t resultId);
     };
 };
