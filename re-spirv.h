@@ -20,6 +20,18 @@ namespace respv {
         }
     };
 
+    struct Instruction {
+        uint32_t wordIndex = UINT32_MAX;
+
+        Instruction() {
+            // Empty constructor.
+        }
+
+        Instruction(uint32_t wordIndex) {
+            this->wordIndex = wordIndex;
+        }
+    };
+
     struct Result {
         uint32_t instructionIndex = UINT32_MAX;
         uint32_t wordIndex = UINT32_MAX;
@@ -47,16 +59,24 @@ namespace respv {
         uint32_t terminationIndex = UINT32_MAX;
     };
 
+    enum class IndexType {
+        None,
+        Result,
+        Instruction
+    };
+
     struct ListNode {
-        uint32_t nodeIndex = UINT32_MAX;
+        uint32_t index = UINT32_MAX;
+        IndexType indexType = IndexType::None;
         uint32_t nextListIndex = UINT32_MAX;
 
         ListNode() {
             // Empty constructor.
         }
 
-        ListNode(uint32_t nodeIndex, uint32_t nextListIndex) {
-            this->nodeIndex = nodeIndex;
+        ListNode(uint32_t index, IndexType indexType, uint32_t nextListIndex) {
+            this->index = index;
+            this->indexType = indexType;
             this->nextListIndex = nextListIndex;
         }
     };
@@ -67,6 +87,7 @@ namespace respv {
         std::vector<SpecConstant> specConstants;
         std::vector<uint32_t> specConstantsTargetIds;
         std::vector<uint32_t> specIdToConstantIndex;
+        std::vector<Instruction> instructions;
         std::vector<Result> results;
         std::vector<Decorator> decorators;
         std::vector<Block> blocks;

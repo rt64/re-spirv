@@ -38,27 +38,26 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Failed to parse SPIR-V data from %s.\n", inputPath);
         return 1;
     }
-
-    auto beginRunTime = std::chrono::high_resolution_clock::now();
+    
+    auto endParsingTime = std::chrono::high_resolution_clock::now();
     std::vector<uint8_t> optimizedData;
     std::vector<respv::SpecConstant> specConstants = optimizer.getSpecConstants();
 
     ///
-    specConstants[0].values[0] = 0x10;
-    specConstants[1].values[0] = 0x20;
-    specConstants[2].values[0] = 0x40;
-    specConstants[3].values[0] = 0x80;
-    specConstants[4].values[0] = 0x100;
+    for (uint32_t specTargetId : optimizer.shader.specConstantsTargetIds) {
+        respv::Debugger::printTraversalFrom(optimizer.shader, specTargetId);
+    }
     ///
 
+    auto beginRunTime = std::chrono::high_resolution_clock::now();
     if (!optimizer.run(specConstants.data(), specConstants.size(), optimizedData)) {
         fprintf(stderr, "Failed to optimize SPIR-V data from %s.\n", inputPath);
         return 1;
     }
 
-    auto finishTime = std::chrono::high_resolution_clock::now();
-    double parsingTime = std::chrono::duration_cast<std::chrono::microseconds>(beginRunTime - beginParsingTime).count() / 1000.0f;
-    double optimizationTime = std::chrono::duration_cast<std::chrono::microseconds>(finishTime - beginRunTime).count() / 1000.0f;
+    auto endRunTime = std::chrono::high_resolution_clock::now();
+    double parsingTime = std::chrono::duration_cast<std::chrono::microseconds>(endParsingTime - beginParsingTime).count() / 1000.0f;
+    double optimizationTime = std::chrono::duration_cast<std::chrono::microseconds>(endRunTime - beginRunTime).count() / 1000.0f;
     fprintf(stdout, "Parsing time: %f ms\n", parsingTime);
     fprintf(stdout, "Optimization time: %f ms\n", optimizationTime);
 

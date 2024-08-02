@@ -5,6 +5,7 @@
 #include "re-spirv.h"
 
 #include <cassert>
+#include <stack>
 
 #define SPV_ENABLE_UTILITY_CODE
 
@@ -15,18 +16,32 @@
 namespace respv {
     // Common.
 
-    static uint32_t addToList(uint32_t nodeIndex, uint32_t listIndex, std::vector<ListNode> &listNodes) {
-        listNodes.emplace_back(nodeIndex, listIndex);
+    static uint32_t addToList(uint32_t index, IndexType indexType, uint32_t listIndex, std::vector<ListNode> &listNodes) {
+        listNodes.emplace_back(index, indexType, listIndex);
         return uint32_t(listNodes.size() - 1);
     }
 
     static bool SpvHasOperandRange(SpvOp opCode, uint32_t &operandWordStart, uint32_t &operandWordCount) {
         switch (opCode) {
+        case SpvOpSelect:
+            operandWordStart = 3;
+            operandWordCount = 3;
+            return true;
         case SpvOpNot:
         case SpvOpBitcast:
             operandWordStart = 3;
             operandWordCount = 1;
             return true;
+        case SpvOpIEqual:
+        case SpvOpINotEqual:
+        case SpvOpUGreaterThan:
+        case SpvOpSGreaterThan:
+        case SpvOpUGreaterThanEqual:
+        case SpvOpSGreaterThanEqual:
+        case SpvOpULessThan:
+        case SpvOpSLessThan:
+        case SpvOpULessThanEqual:
+        case SpvOpSLessThanEqual:
         case SpvOpShiftRightLogical:
         case SpvOpShiftRightArithmetic:
         case SpvOpShiftLeftLogical:
@@ -35,6 +50,15 @@ namespace respv {
         case SpvOpBitwiseXor:
             operandWordStart = 3;
             operandWordCount = 2;
+            return true;
+        case SpvOpPhi:
+            operandWordStart = 3;
+            operandWordCount = UINT32_MAX;
+            return true;
+        case SpvOpBranchConditional:
+        case SpvOpSwitch:
+            operandWordStart = 1;
+            operandWordCount = 1;
             return true;
         default:
             operandWordStart = 0;
@@ -69,14 +93,17 @@ namespace respv {
             fprintf(stderr, "Invalid SPIR-V Magic Number on header.\n");
             return false;
         }
-
+        
         if (spirvWords[1] > SpvVersion) {
             fprintf(stderr, "SPIR-V Version is too new for the library. Max version for the library is 0x%X.\n", SpvVersion);
             return false;
         }
 
         const uint32_t idBound = spirvWords[3];
+        instructions.reserve(idBound);
+        listNodes.reserve(idBound);
         results.resize(idBound, Result());
+        results.shrink_to_fit();
 
         // Parse all instructions.
         Block block;
@@ -142,7 +169,14 @@ namespace respv {
                 break;
             }
 
-            if ((resultId != UINT32_MAX) && SpvHasOperandRange(opCode, operandWordStart, operandWordCount)) {
+            if (SpvHasOperandRange(opCode, operandWordStart, operandWordCount)) {
+                if (wordCount <= operandWordStart) {
+                    fprintf(stderr, "SPIR-V Parsing error. Instruction doesn't have enough words for operand count.\n");
+                    return false;
+                }
+
+                operandWordCount = std::min(uint32_t(wordCount) - operandWordStart, operandWordCount);
+
                 for (uint32_t i = 0; i < operandWordCount; i++) {
                     uint32_t operandId = spirvWords[wordIndex + operandWordStart + i];
                     if (operandId >= idBound) {
@@ -150,7 +184,8 @@ namespace respv {
                         return false;
                     }
 
-                    results[operandId].adjacentListIndex = addToList(resultId, results[operandId].adjacentListIndex, listNodes);
+                    bool addResult = (resultId != UINT32_MAX);
+                    results[operandId].adjacentListIndex = addToList(addResult ? resultId : uint32_t(instructions.size()), addResult ? IndexType::Result : IndexType::Instruction, results[operandId].adjacentListIndex, listNodes);
                 }
             }
 
@@ -159,6 +194,7 @@ namespace respv {
                 return false;
             }
 
+            instructions.emplace_back(wordIndex);
             wordIndex += wordCount;
             instructionIndex++;
         }
@@ -216,10 +252,6 @@ namespace respv {
 
         // Indicate the data has been parsed and filled in correctly.
         valid = true;
-
-        for (uint32_t specTargetId : specConstantsTargetIds) {
-            Debugger::printTraversalFrom(*this, specTargetId);
-        }
 
         return true;
     }
@@ -300,14 +332,50 @@ namespace respv {
 
     // Debugger.
 
-    void Debugger::printTraversalFrom(const Shader &shader, uint32_t resultId) {
-        printf("Adjacent to %d:\n", resultId);
+    struct Iteration {
+        uint32_t index = UINT32_MAX;
+        IndexType indexType = IndexType::None;
+        uint32_t depth = 0;
 
-        uint32_t listIndex = shader.results[resultId].adjacentListIndex;
-        while (listIndex != UINT32_MAX) {
-            uint32_t adjacentResultId = shader.listNodes[listIndex].nodeIndex;
-            printf("\t%d\n", adjacentResultId);
-            listIndex = shader.listNodes[listIndex].nextListIndex;
+        Iteration() {
+            // Empty constructor.
+        }
+
+        Iteration(uint32_t index, IndexType indexType, uint32_t depth) {
+            this->index = index;
+            this->indexType = indexType;
+            this->depth = depth;
+        }
+    };
+    
+    void Debugger::printTraversalFrom(const Shader &shader, uint32_t resultId) {
+        std::stack<Iteration> iterationStack;
+        iterationStack.emplace(resultId, IndexType::Result, 0);
+        while (!iterationStack.empty()) {
+            Iteration it = iterationStack.top();
+            iterationStack.pop();
+
+            for (uint32_t i = 0; i < it.depth; i++) {
+                fprintf(stdout, "\t");
+            }
+
+            if (it.indexType == IndexType::Result) {
+                const Result &result = shader.results[it.index];
+                SpvOp opCode = SpvOp(shader.spirvWords[result.wordIndex] & 0xFFFFU);
+                fprintf(stdout, "[%d] %%%d = %s\n", result.instructionIndex, it.index, SpvOpToString(opCode));
+
+                uint32_t listIndex = result.adjacentListIndex;
+                while (listIndex != UINT32_MAX) {
+                    const ListNode &listNode = shader.listNodes[listIndex];
+                    iterationStack.emplace(listNode.index, listNode.indexType, it.depth + 1);
+                    listIndex = listNode.nextListIndex;
+                }
+            }
+            else if (it.indexType == IndexType::Instruction) {
+                const Instruction &instruction = shader.instructions[it.index];
+                SpvOp opCode = SpvOp(shader.spirvWords[instruction.wordIndex] & 0xFFFFU);
+                fprintf(stdout, "[%d] %s\n", it.index, SpvOpToString(opCode));
+            }
         }
     }
 };
