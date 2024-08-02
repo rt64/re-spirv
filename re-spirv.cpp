@@ -356,7 +356,7 @@ namespace respv {
             iterationStack.pop();
 
             for (uint32_t i = 0; i < it.depth; i++) {
-                fprintf(stdout, "\t");
+                fprintf(stdout, "  ");
             }
 
             if (it.indexType == IndexType::Result) {
