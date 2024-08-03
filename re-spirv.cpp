@@ -488,22 +488,24 @@ namespace respv {
 
         thread_local std::stack<uint32_t> blockStack;
         blockStack.emplace(firstBlockIndex);
-
+        
         while (!blockStack.empty()) {
             uint32_t blockIndex = blockStack.top();
             blockStack.pop();
 
-            assert((localBlockDegrees[blockIndex] > 0) && "It should not be possible for a block's degree to be reduced below 0.");
-            localBlockDegrees[blockIndex]--;
+            // A block's degree may become 0 because it's already been deleted from the graph.
+            if (localBlockDegrees[blockIndex] > 0) {
+                localBlockDegrees[blockIndex]--;
 
-            // When a block's degree reaches zero, all adjacent blocks must also be decreased.
-            if (localBlockDegrees[blockIndex] == 0) {
-                uint32_t listIndex = shader.blocks[blockIndex].adjacentListIndex;
-                while (listIndex != UINT32_MAX) {
-                    const ListNode &listNode = shader.listNodes[listIndex];
-                    assert((listNode.idType == IdType::Block) && "Only blocks must exist in the adjacency list");
-                    blockStack.push(listNode.id);
-                    listIndex = listNode.nextListIndex;
+                // When a block's degree reaches zero, all adjacent blocks must also be decreased.
+                if (localBlockDegrees[blockIndex] == 0) {
+                    uint32_t listIndex = shader.blocks[blockIndex].adjacentListIndex;
+                    while (listIndex != UINT32_MAX) {
+                        const ListNode &listNode = shader.listNodes[listIndex];
+                        assert((listNode.idType == IdType::Block) && "Only blocks must exist in the adjacency list");
+                        blockStack.push(listNode.id);
+                        listIndex = listNode.nextListIndex;
+                    }
                 }
             }
         }
@@ -549,6 +551,66 @@ namespace respv {
         case SpvOpConstantFalse:
             resolution = Resolution::fromBool(false);
             break;
+        case SpvOpIEqual: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool(firstResolution.value.u32 == secondResolution.value.u32);
+            break;
+        }
+        case SpvOpINotEqual: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool(firstResolution.value.u32 != secondResolution.value.u32);
+            break;
+        }
+        case SpvOpUGreaterThan: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool(firstResolution.value.u32 > secondResolution.value.u32);
+            break;
+        }
+        case SpvOpSGreaterThan: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool(firstResolution.value.i32 > secondResolution.value.i32);
+            break;
+        }
+        case SpvOpUGreaterThanEqual: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool(firstResolution.value.u32 >= secondResolution.value.u32);
+            break;
+        }
+        case SpvOpSGreaterThanEqual: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool(firstResolution.value.i32 >= secondResolution.value.i32);
+            break;
+        }
+        case SpvOpULessThan: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool(firstResolution.value.u32 < secondResolution.value.u32);
+            break;
+        }
+        case SpvOpSLessThan: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool(firstResolution.value.i32 < secondResolution.value.i32);
+            break;
+        }
+        case SpvOpULessThanEqual: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool(firstResolution.value.u32 <= secondResolution.value.u32);
+            break;
+        }
+        case SpvOpSLessThanEqual: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool(firstResolution.value.i32 <= secondResolution.value.i32);
+            break;
+        }
         case SpvOpShiftRightLogical: {
             const Resolution &baseResolution = resolutions[optimizedWords[resultWordIndex + 3]];
             const Resolution &shiftResolution = resolutions[optimizedWords[resultWordIndex + 4]];
@@ -646,10 +708,15 @@ namespace respv {
     }
 
     static void evaluateTerminator(const Shader &shader, uint32_t instructionIndex, std::vector<Resolution> &resolutions, std::vector<uint32_t> &localBlockDegrees, std::vector<uint32_t> &localBlockReductions, std::vector<uint8_t> &optimizedData) {
+        // Check if this block needs to be evaluated at all, as it may have been unreferenced already.
+        const Instruction &instruction = shader.instructions[instructionIndex];
+        if (localBlockDegrees[instruction.blockIndex] == 0) {
+            return;
+        }
+
         // For each type of supported terminator, check if the operands can be resolved into constants.
         // If they can be resolved, eliminate any other branches that don't pass the condition.
         uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(optimizedData.data());
-        const Instruction &instruction = shader.instructions[instructionIndex];
         uint32_t wordIndex = instruction.wordIndex;
         SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
         uint16_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
@@ -664,7 +731,7 @@ namespace respv {
             if (operatorResolution.type != Resolution::Type::Constant) {
                 return;
             }
-
+            
             if (opCode == SpvOpBranchConditional) {
                 // Branch conditional only needs to choose either label depending on whether the result is true or false.
                 if (operatorResolution.value.u32) {
