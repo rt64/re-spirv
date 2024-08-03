@@ -114,7 +114,7 @@ namespace respv {
         listNodes.emplace_back(id, idType, listIndex);
         return uint32_t(listNodes.size() - 1);
     }
-
+    
     bool Shader::parseWords(const void *data, size_t size) {
         assert(data != nullptr);
         assert(size > 0);
@@ -145,11 +145,10 @@ namespace respv {
         results.shrink_to_fit();
 
         // Parse all instructions.
-        Block currentBlock;
         uint32_t wordIndex = startingWordIndex;
-        uint32_t blockIndex = UINT32_MAX;
+        Block activeBlock;
+        activeBlock.wordIndex = wordIndex;
         while (wordIndex < spirvWordCount) {
-            // Push the new instruction immediately.
             uint32_t instructionIndex = uint32_t(instructions.size());
             SpvOp opCode = SpvOp(spirvWords[wordIndex] & 0xFFFFU);
             uint16_t wordCount = (spirvWords[wordIndex] >> 16U) & 0xFFFFU;
@@ -172,13 +171,28 @@ namespace respv {
                 resultId = UINT32_MAX;
             }
 
+            bool endBlock = false;
             switch (opCode) {
             case SpvOpDecorate:
                 decorators.emplace_back(instructionIndex);
                 break;
             case SpvOpLabel:
-                blockIndex = uint32_t(blocks.size());
-                currentBlock.startInstructionIndex = instructionIndex;
+                // If a block is already in progress, it is only allowed if it's not labeled.
+                if (activeBlock.instructionCount > 0) {
+                    if (isBlockLabeled(activeBlock)) {
+                        fprintf(stderr, "SPIR-V Parsing error. A block can't be started while another block is in progress.\n");
+                        return false;
+                    }
+                    else {
+                        blocks.emplace_back(activeBlock);
+                    }
+                }
+
+                // Start a new labeled block.
+                activeBlock.wordIndex = wordIndex;
+                activeBlock.wordCount = 0;
+                activeBlock.instructionIndex = instructionIndex;
+                activeBlock.instructionCount = 0;
                 break;
             case SpvOpBranch:
             case SpvOpBranchConditional:
@@ -187,17 +201,13 @@ namespace respv {
             case SpvOpReturnValue:
             case SpvOpKill:
             case SpvOpUnreachable:
-                currentBlock.endInstructionIndex = instructionIndex;
-
-                if (currentBlock.startInstructionIndex == UINT32_MAX) {
-                    fprintf(stderr, "SPIR-V Parsing error. Encountered a termination instruction but no label was defined previously.\n");
+                if ((activeBlock.instructionCount == 0) || !isBlockLabeled(activeBlock)) {
+                    fprintf(stderr, "SPIR-V Parsing error. Encountered a termination instruction but no labeled block was in progress.\n");
                     return false;
                 }
                 else {
-                    blocks.emplace_back(currentBlock);
-                    currentBlock.startInstructionIndex = UINT32_MAX;
-                    currentBlock.endInstructionIndex = UINT32_MAX;
-                    blockIndex = UINT32_MAX;
+                    // Indicate the active block should be finished.
+                    endBlock = true;
                 }
 
                 break;
@@ -232,16 +242,36 @@ namespace respv {
                 return false;
             }
 
-            instructions.emplace_back(wordIndex, blockIndex);
+            instructions.emplace_back(wordIndex, uint32_t(blocks.size()));
+            activeBlock.instructionCount++;
+            activeBlock.wordCount += wordCount;
             wordIndex += wordCount;
+
+            if (endBlock) {
+                blocks.emplace_back(activeBlock);
+                activeBlock.wordIndex = wordIndex;
+                activeBlock.wordCount = 0;
+                activeBlock.instructionIndex = instructionIndex + 1;
+                activeBlock.instructionCount = 0;
+            }
         }
 
-        if ((currentBlock.startInstructionIndex != UINT32_MAX) && (currentBlock.endInstructionIndex == UINT32_MAX)) {
-            fprintf(stderr, "SPIR-V Parsing error. Last block of the shader was not finished.\n");
-            return false;
+        if (activeBlock.instructionCount > 0) {
+            if (isBlockLabeled(activeBlock)) {
+                fprintf(stderr, "SPIR-V Parsing error. Last block of the shader was not finished.\n");
+                return false;
+            }
+            else {
+                blocks.emplace_back(activeBlock);
+            }
         }
 
         return true;
+    }
+
+    bool Shader::isBlockLabeled(const Block &block) const {
+        const Instruction &labelInstruction = instructions[block.instructionIndex];
+        return (SpvOp(spirvWords[labelInstruction.wordIndex] & 0xFFFFU) == SpvOpLabel);
     }
 
     bool Shader::processBlockAdjacentTo(Block &block, uint32_t labelId) {
@@ -264,30 +294,46 @@ namespace respv {
     bool Shader::processBlocks() {
         blockDegrees.clear();
         blockDegrees.resize(blocks.size(), 0);
+        
+        bool firstLabeledBlockMaxDegree = true;
+        for (uint32_t i = 0; i < blocks.size(); i++) {
+            Block &block = blocks[i];
+            if (!isBlockLabeled(block)) {
+                // Unlabeled blocks are always included.
+                blockDegrees[i] = 1;
+                continue;
+            }
 
-        for (Block &block : blocks) {
-            uint32_t endWordIndex = instructions[block.endInstructionIndex].wordIndex;
+            // We can't reach the first labeled block from anywhere, so it must be included.
+            if (firstLabeledBlockMaxDegree) {
+                blockDegrees[i] = 1;
+                firstLabeledBlockMaxDegree = false;
+            }
+
+            uint32_t endWordIndex = instructions[block.endInstructionIndex()].wordIndex;
             SpvOp opCode = SpvOp(spirvWords[endWordIndex] & 0xFFFFU);
             uint16_t endWordCount = (spirvWords[endWordIndex] >> 16U) & 0xFFFFU;
             uint32_t labelWordStart, labelWordCount, labelWordStride;
             if (SpvHasLabels(opCode, labelWordStart, labelWordCount, labelWordStride)) {
-                for (uint32_t i = 0; (i < labelWordCount) && ((labelWordStart + i * labelWordStride) < endWordCount); i++) {
-                    if (!processBlockAdjacentTo(block, spirvWords[endWordIndex + labelWordStart + i * labelWordStride])) {
+                for (uint32_t j = 0; (j < labelWordCount) && ((labelWordStart + j * labelWordStride) < endWordCount); j++) {
+                    if (!processBlockAdjacentTo(block, spirvWords[endWordIndex + labelWordStart + j * labelWordStride])) {
                         return false;
                     }
                 }
             }
 
-            uint32_t mergeWordIndex = instructions[block.endInstructionIndex - 1].wordIndex;
-            SpvOp mergeOpCode = SpvOp(spirvWords[mergeWordIndex] & 0xFFFFU);
-            if (mergeOpCode == SpvOpSelectionMerge) {
-                if (!processBlockAdjacentTo(block, spirvWords[mergeWordIndex + 1])) {
+            if (block.instructionCount >= 3) {
+                uint32_t mergeWordIndex = instructions[block.mergeInstructionIndex()].wordIndex;
+                SpvOp mergeOpCode = SpvOp(spirvWords[mergeWordIndex] & 0xFFFFU);
+                if (mergeOpCode == SpvOpSelectionMerge) {
+                    if (!processBlockAdjacentTo(block, spirvWords[mergeWordIndex + 1])) {
+                        return false;
+                    }
+                }
+                else if (mergeOpCode == SpvOpLoopMerge) {
+                    fprintf(stderr, "SPIR-V Parsing error. SpvOpLoopMerge is not supported yet.\n");
                     return false;
                 }
-            }
-            else if (mergeOpCode == SpvOpLoopMerge) {
-                fprintf(stderr, "SPIR-V Parsing error. SpvOpLoopMerge is not supported yet.\n");
-                return false;
             }
         }
 
@@ -384,6 +430,34 @@ namespace respv {
             return false;
         }
 
+        const size_t originalDataSize = shader.spirvWordCount * sizeof(uint32_t);
+        optimizedData.clear();
+        optimizedData.resize(originalDataSize);
+
+        thread_local std::vector<uint32_t> localBlockDegrees;
+        localBlockDegrees.resize(shader.blockDegrees.size());
+        memcpy(localBlockDegrees.data(), shader.blockDegrees.data(), localBlockDegrees.size() * sizeof(uint32_t));
+
+        // Copy the header of the original SPIR-V as is.
+        size_t optimizedDataSize = 0;
+        const size_t headerSize = 5 * sizeof(uint32_t);
+        memcpy(optimizedData.data(), shader.spirvWords, headerSize);
+        optimizedDataSize += headerSize;
+
+        // Write out all the blocks with at least one degree.
+        for (uint32_t i = 0; i < uint32_t(shader.blocks.size()); i++) {
+            if (localBlockDegrees[i] == 0) {
+                continue;
+            }
+
+            size_t blockSize = shader.blocks[i].wordCount * sizeof(uint32_t);
+            assert((optimizedDataSize + blockSize) <= originalDataSize);
+            memcpy(&optimizedData[optimizedDataSize], &shader.spirvWords[shader.blocks[i].wordIndex], blockSize);
+            optimizedDataSize += blockSize;
+        }
+
+        optimizedData.resize(optimizedDataSize);
+#if 0
         optimizedData.resize(shader.spirvWordCount * sizeof(uint32_t));
         memcpy(optimizedData.data(), shader.spirvWords, optimizedData.size());
         
@@ -426,6 +500,7 @@ namespace respv {
                 return false;
             }
         }
+#endif
 
         return true;
     }
@@ -482,7 +557,7 @@ namespace respv {
 
     void Debugger::printBlockStatistics(const Shader &shader) {
         for (uint32_t i = 0; i < uint32_t(shader.blocks.size()); i++) {
-            fprintf(stdout, "[%d] [%d] Degree %d\n", shader.blocks[i].startInstructionIndex, shader.blocks[i].endInstructionIndex, shader.blockDegrees[i]);
+            fprintf(stdout, "[%d] [%d] Degree %d\n", shader.blocks[i].instructionIndex, shader.blocks[i].endInstructionIndex(), shader.blockDegrees[i]);
         }
     }
 };

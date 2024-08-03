@@ -56,9 +56,19 @@ namespace respv {
     };
 
     struct Block {
-        uint32_t startInstructionIndex = UINT32_MAX;
-        uint32_t endInstructionIndex = UINT32_MAX;
+        uint32_t wordIndex = 0;
+        uint32_t wordCount = 0;
+        uint32_t instructionIndex = 0;
+        uint32_t instructionCount = 0;
         uint32_t adjacentListIndex = UINT32_MAX;
+
+        uint32_t mergeInstructionIndex() const {
+            return instructionIndex + instructionCount - 2;
+        }
+
+        uint32_t endInstructionIndex() const {
+            return instructionIndex + instructionCount - 1;
+        }
     };
 
     enum class IdType {
@@ -103,6 +113,7 @@ namespace respv {
         void clear();
         uint32_t addToList(uint32_t id, IdType idType, uint32_t listIndex);
         bool parseWords(const void *data, size_t size);
+        bool isBlockLabeled(const Block &block) const;
         bool processBlockAdjacentTo(Block &block, uint32_t labelId);
         bool processBlocks();
         bool processDecorators();
