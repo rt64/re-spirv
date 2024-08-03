@@ -471,13 +471,16 @@ namespace respv {
         }
     };
 
-    static void prepareShaderData(const Shader &shader, std::vector<uint32_t> &localBlockDegrees, std::vector<uint8_t> &optimizedData) {
+    static void prepareShaderData(const Shader &shader, std::vector<uint32_t> &localBlockDegrees, std::vector<uint32_t> &localBlockReductions, std::vector<uint8_t> &optimizedData) {
         const size_t originalDataSize = shader.spirvWordCount * sizeof(uint32_t);
         optimizedData.resize(originalDataSize);
         memcpy(optimizedData.data(), shader.spirvWords, originalDataSize);
 
         localBlockDegrees.resize(shader.blockDegrees.size());
         memcpy(localBlockDegrees.data(), shader.blockDegrees.data(), localBlockDegrees.size() * sizeof(uint32_t));
+
+        localBlockReductions.clear();
+        localBlockReductions.resize(shader.blocks.size(), 0);
     }
 
     static void reduceBlockDegree(const Shader &shader, uint32_t firstBlockIndex, std::vector<uint32_t> &localBlockDegrees) {
@@ -512,7 +515,7 @@ namespace respv {
     }
 
     static void solveResult(const Shader &shader, uint32_t resultId, std::vector<Resolution> &resolutions, const std::vector<uint8_t> &optimizedData) {
-        // This function assumes all operands have already been evaluated by the caller.
+        // This function assumes all operands have already been evaluated by the caller and are constant.
         const uint32_t *optimizedWords = reinterpret_cast<const uint32_t *>(optimizedData.data());
         const Result &result = shader.results[resultId];
         Resolution &resolution = resolutions[resultId];
@@ -546,6 +549,42 @@ namespace respv {
         case SpvOpConstantFalse:
             resolution = Resolution::fromBool(false);
             break;
+        case SpvOpShiftRightLogical: {
+            const Resolution &baseResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &shiftResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromUint32(baseResolution.value.u32 << shiftResolution.value.u32);
+            break;
+        }
+        case SpvOpShiftRightArithmetic: {
+            const Resolution &baseResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &shiftResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromInt32(baseResolution.value.i32 << shiftResolution.value.i32);
+            break;
+        }
+        case SpvOpShiftLeftLogical: {
+            const Resolution &baseResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &shiftResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromUint32(baseResolution.value.u32 >> shiftResolution.value.u32);
+            break;
+        }
+        case SpvOpBitwiseOr: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromUint32(firstResolution.value.u32 | secondResolution.value.u32);
+            break;
+        }
+        case SpvOpBitwiseAnd: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromUint32(firstResolution.value.u32 & secondResolution.value.u32);
+            break;
+        }
+        case SpvOpBitwiseXor: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromUint32(firstResolution.value.u32 ^ secondResolution.value.u32);
+            break;
+        }
         default:
             // It's not known how to evaluate the instruction, consider the result a variable.
             resolution.type = Resolution::Type::Variable;
@@ -606,11 +645,12 @@ namespace respv {
         }
     }
 
-    static void evaluateTerminator(const Shader &shader, uint32_t instructionIndex, std::vector<Resolution> &resolutions, std::vector<uint32_t> &localBlockDegrees, std::vector<uint8_t> &optimizedData) {
+    static void evaluateTerminator(const Shader &shader, uint32_t instructionIndex, std::vector<Resolution> &resolutions, std::vector<uint32_t> &localBlockDegrees, std::vector<uint32_t> &localBlockReductions, std::vector<uint8_t> &optimizedData) {
         // For each type of supported terminator, check if the operands can be resolved into constants.
         // If they can be resolved, eliminate any other branches that don't pass the condition.
         uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(optimizedData.data());
-        uint32_t wordIndex = shader.instructions[instructionIndex].wordIndex;
+        const Instruction &instruction = shader.instructions[instructionIndex];
+        uint32_t wordIndex = instruction.wordIndex;
         SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
         uint16_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
         uint32_t finalBranchLabelId = UINT32_MAX;
@@ -657,19 +697,17 @@ namespace respv {
                     reduceBlockDegreeByLabel(shader, optimizedWords[wordIndex + 2], localBlockDegrees);
                 }
             }
-
-            // Patch the terminator to be an unconditional branch.
+            
+            // Patch the terminator to be an unconditional branch. Reduce the block's size.
             if (finalBranchLabelId != UINT32_MAX) {
-                optimizedWords[wordIndex] = SpvOpBranch | (optimizedWords[wordIndex] & 0xFFFF0000U);
+                optimizedWords[wordIndex] = SpvOpBranch | (2U << 16U);
                 optimizedWords[wordIndex + 1] = finalBranchLabelId;
-                for (uint32_t i = 2; i < wordCount; i++) {
-                    optimizedWords[wordIndex + i] = SpvOpNop | (1U << 16U);
-                }
+                localBlockReductions[instruction.blockIndex] = (wordCount - 2) * sizeof(uint32_t);
             }
         }
     }
 
-    static bool runOptimizationPassFrom(const Shader &shader, uint32_t firstResultId, std::vector<Resolution> &resolutions, std::vector<uint32_t> &localBlockDegrees, std::vector<uint8_t> &optimizedData) {
+    static bool runOptimizationPassFrom(const Shader &shader, uint32_t firstResultId, std::vector<Resolution> &resolutions, std::vector<uint32_t> &localBlockDegrees, std::vector<uint32_t> &localBlockReductions, std::vector<uint8_t> &optimizedData) {
         // Do a traversal by looking at the adjacency list of the result.
         thread_local std::stack<uint32_t> resultStack;
         resultStack.emplace(firstResultId);
@@ -691,7 +729,7 @@ namespace respv {
                     resultStack.push(listNode.id);
                 }
                 else if (listNode.idType == IdType::Instruction) {
-                    evaluateTerminator(shader, listNode.id, resolutions, localBlockDegrees, optimizedData);
+                    evaluateTerminator(shader, listNode.id, resolutions, localBlockDegrees, localBlockReductions, optimizedData);
                 }
                 else {
                     assert(false && "No other types of Ids should exist in the adjacency list.");
@@ -704,7 +742,7 @@ namespace respv {
         return true;
     }
 
-    static bool optimizeSpecializationConstants(const Shader &shader, const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint32_t> &localBlockDegrees, std::vector<uint8_t> &optimizedData) {
+    static bool optimizeSpecializationConstants(const Shader &shader, const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint32_t> &localBlockDegrees, std::vector<uint32_t> &localBlockReductions, std::vector<uint8_t> &optimizedData) {
         // Allocate the resolutions vector that will be shared between all optimization passes.
         thread_local std::vector<Resolution> resolutions;
         resolutions.clear();
@@ -749,7 +787,7 @@ namespace respv {
                 return false;
             }
 
-            if (!runOptimizationPassFrom(shader, resultId, resolutions, localBlockDegrees, optimizedData)) {
+            if (!runOptimizationPassFrom(shader, resultId, resolutions, localBlockDegrees, localBlockReductions, optimizedData)) {
                 return false;
             }
         }
@@ -757,7 +795,7 @@ namespace respv {
         return true;
     }
 
-    static void compactShader(const Shader &shader, const std::vector<uint32_t> &localBlockDegrees, std::vector<uint8_t> &optimizedData) {
+    static void compactShader(const Shader &shader, const std::vector<uint32_t> &localBlockDegrees, const std::vector<uint32_t> &localBlockReductions, std::vector<uint8_t> &optimizedData) {
         // Ignore the header.
         size_t optimizedDataSize = 0;
         const size_t headerSize = 5 * sizeof(uint32_t);
@@ -770,8 +808,11 @@ namespace respv {
             }
 
             const size_t originalPosition = shader.blocks[i].wordIndex * sizeof(uint32_t);
-            const size_t blockSize = shader.blocks[i].wordCount * sizeof(uint32_t);
-            if (optimizedDataSize != originalPosition) {
+            size_t blockSize = shader.blocks[i].wordCount * sizeof(uint32_t);
+            assert(localBlockReductions[i] <= blockSize && "Local block reduction can't be bigger than the block's size.");
+            blockSize -= localBlockReductions[i];
+
+            if ((blockSize > 0) && (optimizedDataSize != originalPosition)) {
                 memmove(&optimizedData[optimizedDataSize], &optimizedData[originalPosition], blockSize);
             }
 
@@ -788,13 +829,14 @@ namespace respv {
         }
 
         thread_local std::vector<uint32_t> localBlockDegrees;
-        prepareShaderData(shader, localBlockDegrees, optimizedData);
+        thread_local std::vector<uint32_t> localBlockReductions;
+        prepareShaderData(shader, localBlockDegrees, localBlockReductions, optimizedData);
 
-        if (!optimizeSpecializationConstants(shader, newSpecConstants, newSpecConstantCount, localBlockDegrees, optimizedData)) {
+        if (!optimizeSpecializationConstants(shader, newSpecConstants, newSpecConstantCount, localBlockDegrees, localBlockReductions, optimizedData)) {
             return false;
         }
 
-        compactShader(shader, localBlockDegrees, optimizedData);
+        compactShader(shader, localBlockDegrees, localBlockReductions, optimizedData);
         return true;
     }
 
