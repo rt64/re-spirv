@@ -33,24 +33,26 @@ int main(int argc, char *argv[]) {
     }
 
     auto beginParsingTime = std::chrono::high_resolution_clock::now();
-    respv::Optimizer optimizer;
-    if (!optimizer.parse(fileData.data(), fileData.size())) {
+    respv::Shader shader;
+    if (!shader.parse(fileData.data(), fileData.size())) {
         fprintf(stderr, "Failed to parse SPIR-V data from %s.\n", inputPath);
         return 1;
     }
     
     auto endParsingTime = std::chrono::high_resolution_clock::now();
     std::vector<uint8_t> optimizedData;
-    std::vector<respv::SpecConstant> specConstants = optimizer.getSpecConstants();
+    std::vector<respv::SpecConstant> specConstants = shader.specConstants;
 
     ///
-    for (uint32_t specTargetId : optimizer.shader.specConstantsTargetIds) {
-        respv::Debugger::printTraversalFrom(optimizer.shader, specTargetId);
+    for (uint32_t specTargetId : shader.specConstantsTargetIds) {
+        respv::Debugger::printTraversalFrom(shader, specTargetId);
     }
+
+    respv::Debugger::printBlockStatistics(shader);
     ///
 
     auto beginRunTime = std::chrono::high_resolution_clock::now();
-    if (!optimizer.run(specConstants.data(), specConstants.size(), optimizedData)) {
+    if (!respv::Optimizer::run(shader, specConstants.data(), specConstants.size(), optimizedData)) {
         fprintf(stderr, "Failed to optimize SPIR-V data from %s.\n", inputPath);
         return 1;
     }

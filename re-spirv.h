@@ -94,36 +94,28 @@ namespace respv {
         std::vector<Result> results;
         std::vector<Decorator> decorators;
         std::vector<Block> blocks;
+        std::vector<uint32_t> blockDegrees;
         std::vector<ListNode> listNodes;
         bool valid = false;
 
+        Shader();
+        Shader(const void *data, size_t size);
+        void clear();
+        uint32_t addToList(uint32_t id, IdType idType, uint32_t listIndex);
+        bool parseWords(const void *data, size_t size);
+        bool processBlockAdjacentTo(Block &block, uint32_t labelId);
+        bool processBlocks();
+        bool processDecorators();
         bool parse(const void *data, size_t size);
         bool empty() const;
     };
 
     struct Optimizer {
-        Shader shader;
-
-        // Default empty constructor.
-        Optimizer();
-
-        // Parses the SPIR-V during construction. Data must remain available during the lifetime of the object.
-        Optimizer(const void *data, size_t size);
-
-        // Data must remain available during the lifetime of the object.
-        bool parse(const void *data, size_t size);
-
-        // Check whether the optimizer has parsed any SPIR-V data.
-        bool empty() const;
-
-        // Return the specialization constants that were parsed.
-        const std::vector<SpecConstant> &getSpecConstants() const;
-
-        // Run the optimizer with the specified values for specialization constants and return the optimized data.
-        bool run(const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData) const;
+        static bool run(const Shader &shader, const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData);
     };
 
     struct Debugger {
         static void printTraversalFrom(const Shader &shader, uint32_t resultId);
+        static void printBlockStatistics(const Shader &shader);
     };
 };
