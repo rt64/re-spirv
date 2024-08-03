@@ -119,6 +119,8 @@ namespace respv {
         bool processDecorators();
         bool parse(const void *data, size_t size);
         bool empty() const;
+        const Instruction resultToInstruction(uint32_t resultId) const;
+        uint32_t resultToWordIndex(uint32_t resultId) const;
     };
 
     struct Optimizer {

@@ -42,15 +42,6 @@ int main(int argc, char *argv[]) {
     auto endParsingTime = std::chrono::high_resolution_clock::now();
     std::vector<uint8_t> optimizedData;
     std::vector<respv::SpecConstant> specConstants = shader.specConstants;
-
-    ///
-    for (uint32_t specTargetId : shader.specConstantsTargetIds) {
-        respv::Debugger::printTraversalFrom(shader, specTargetId);
-    }
-
-    respv::Debugger::printBlockStatistics(shader);
-    ///
-
     auto beginRunTime = std::chrono::high_resolution_clock::now();
     if (!respv::Optimizer::run(shader, specConstants.data(), specConstants.size(), optimizedData)) {
         fprintf(stderr, "Failed to optimize SPIR-V data from %s.\n", inputPath);
