@@ -820,14 +820,12 @@ namespace respv {
         for (uint32_t i = 0; i < newSpecConstantCount; i++) {
             const SpecConstant &newSpecConstant = newSpecConstants[i];
             if (newSpecConstant.specId >= shader.specIdToConstantIndex.size()) {
-                fprintf(stderr, "Optimization error. Spec Id %u was not detected in the shader.\n", newSpecConstant.specId);
-                return false;
+                continue;
             }
 
             uint32_t specIndex = shader.specIdToConstantIndex[newSpecConstant.specId];
             if (specIndex == UINT32_MAX) {
-                fprintf(stderr, "Optimization error. Spec Id %u was not detected in the shader.\n", newSpecConstant.specId);
-                return false;
+                continue;
             }
 
             const SpecConstant &specConstant = shader.specConstants[specIndex];
