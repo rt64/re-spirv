@@ -866,11 +866,11 @@ namespace respv {
             }
         }
     }
-
+    
     static void evaluateTerminator(uint32_t instructionIndex, std::vector<Resolution> &resolutions, OptimizerContext &c) {
-        // Check if this block needs to be evaluated at all, as it may have been unreferenced already.
+        // Check if this block needs to be evaluated at all, as it may have been unreferenced already. Also skip it if it's already been evaluated and reduced once before.
         const Instruction &instruction = c.shader.instructions[instructionIndex];
-        if (c.localBlockDegrees[instruction.blockIndex] == 0) {
+        if ((c.localBlockDegrees[instruction.blockIndex] == 0) || (c.localBlockReductions[instruction.blockIndex] > 0)) {
             return;
         }
 
@@ -927,6 +927,7 @@ namespace respv {
             
             // Patch the terminator to be an unconditional branch. Reduce the block's size.
             if (finalBranchLabelId != UINT32_MAX) {
+                const Block &block = c.shader.blocks[instruction.blockIndex];
                 uint32_t mergeInstructionIndex = c.shader.blocks[instruction.blockIndex].mergeInstructionIndex();
                 uint32_t mergeWordIndex = c.shader.instructions[mergeInstructionIndex].wordIndex;
                 SpvOp mergeOpCode = SpvOp(optimizedWords[mergeWordIndex] & 0xFFFFU);
