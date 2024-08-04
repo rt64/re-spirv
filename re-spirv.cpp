@@ -26,6 +26,11 @@ namespace respv {
             operandWordStart = 3;
             operandWordCount = 1;
             return true;
+        case SpvOpIAdd:
+        case SpvOpISub:
+        case SpvOpIMul:
+        case SpvOpUDiv:
+        case SpvOpSDiv:
         case SpvOpIEqual:
         case SpvOpINotEqual:
         case SpvOpUGreaterThan:
@@ -610,6 +615,41 @@ namespace respv {
         case SpvOpConstantFalse:
             resolution = Resolution::fromBool(false);
             break;
+        case SpvOpBitcast: {
+            const Resolution &operandResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            resolution = Resolution::fromUint32(operandResolution.value.u32);
+            break;
+        }
+        case SpvOpIAdd: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromUint32(firstResolution.value.u32 + secondResolution.value.u32);
+            break;
+        }
+        case SpvOpISub: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromUint32(firstResolution.value.u32 - secondResolution.value.u32);
+            break;
+        }
+        case SpvOpIMul: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromUint32(firstResolution.value.u32 * secondResolution.value.u32);
+            break;
+        }
+        case SpvOpUDiv: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromUint32(firstResolution.value.u32 / secondResolution.value.u32);
+            break;
+        }
+        case SpvOpSDiv: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromUint32(firstResolution.value.i32 / secondResolution.value.i32);
+            break;
+        }
         case SpvOpIEqual: {
             const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
             const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
@@ -704,6 +744,11 @@ namespace respv {
             const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
             const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromUint32(firstResolution.value.u32 ^ secondResolution.value.u32);
+            break;
+        }
+        case SpvOpNot: {
+            const Resolution &operandResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            resolution = Resolution::fromUint32(~operandResolution.value.u32);
             break;
         }
         default:
