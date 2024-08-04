@@ -17,12 +17,13 @@ namespace respv {
 
     static const uint32_t SpvNopWord = SpvOpNop | (1U << 16U);
 
-    static bool SpvHasOperandRange(SpvOp opCode, uint32_t &operandWordStart, uint32_t &operandWordCount) {
+    static bool SpvHasOperandRange(SpvOp opCode, uint32_t &operandWordStart, uint32_t &operandWordCount, uint32_t &operandWordStride) {
         switch (opCode) {
         case SpvOpNot:
         case SpvOpBitcast:
             operandWordStart = 3;
             operandWordCount = 1;
+            operandWordStride = 1;
             return true;
         case SpvOpIAdd:
         case SpvOpISub:
@@ -31,6 +32,7 @@ namespace respv {
         case SpvOpSDiv:
             operandWordStart = 3;
             operandWordCount = 2;
+            operandWordStride = 1;
             return true;    
         case SpvOpLogicalEqual:
         case SpvOpLogicalNotEqual:
@@ -38,14 +40,17 @@ namespace respv {
         case SpvOpLogicalAnd:
             operandWordStart = 3;
             operandWordCount = 2;
+            operandWordStride = 1;
             return true;
         case SpvOpLogicalNot:
             operandWordStart = 3;
             operandWordCount = 1;
+            operandWordStride = 1;
             return true;
         case SpvOpSelect:
             operandWordStart = 3;
             operandWordCount = 3;
+            operandWordStride = 1;
             return true;
         case SpvOpIEqual:
         case SpvOpINotEqual:
@@ -65,18 +70,21 @@ namespace respv {
         case SpvOpBitwiseXor:
             operandWordStart = 3;
             operandWordCount = 2;
+            operandWordStride = 1;
             return true;
         case SpvOpPhi:
             operandWordStart = 3;
             operandWordCount = UINT32_MAX;
+            operandWordStride = 2;
             return true;
         case SpvOpBranchConditional:
         case SpvOpSwitch:
             operandWordStart = 1;
             operandWordCount = 1;
+            operandWordStride = 1;
             return true;
         default:
-            operandWordStart = operandWordCount = 0;
+            operandWordStart = operandWordCount = operandWordStride = 0;
             return false;
         }
     }
@@ -236,22 +244,20 @@ namespace respv {
                 break;
             }
 
-            uint32_t operandWordStart, operandWordCount;
-            if (SpvHasOperandRange(opCode, operandWordStart, operandWordCount)) {
+            uint32_t operandWordStart, operandWordCount, operandWordStride;
+            if (SpvHasOperandRange(opCode, operandWordStart, operandWordCount, operandWordStride)) {
                 if (wordCount <= operandWordStart) {
                     fprintf(stderr, "SPIR-V Parsing error. Instruction doesn't have enough words for operand count.\n");
                     return false;
                 }
 
-                operandWordCount = std::min(uint32_t(wordCount) - operandWordStart, operandWordCount);
-
-                for (uint32_t i = 0; i < operandWordCount; i++) {
-                    uint32_t operandId = spirvWords[wordIndex + operandWordStart + i];
+                for (uint32_t i = 0; (i < operandWordCount) && ((operandWordStart + i * operandWordStride) < wordCount); i++) {
+                    uint32_t operandId = spirvWords[wordIndex + operandWordStart + i * operandWordStride];
                     if (operandId >= idBound) {
                         fprintf(stderr, "SPIR-V Parsing error. Invalid Operand ID: %u.\n", operandId);
                         return false;
                     }
-
+                    
                     bool addResult = (resultId != UINT32_MAX);
                     results[operandId].adjacentListIndex = addToList(addResult ? resultId : instructionIndex, addResult ? IdType::Result : IdType::Instruction, results[operandId].adjacentListIndex);
                 }
@@ -833,11 +839,11 @@ namespace respv {
             uint32_t resultWordIndex = c.shader.instructions[result.instructionIndex].wordIndex;
             SpvOp opCode = SpvOp(optimizedWords[resultWordIndex] & 0xFFFFU);
             uint16_t resultWordCount = (optimizedWords[resultWordIndex] >> 16U) & 0xFFFFU;
-            uint32_t operandWordStart, operandWordCount;
-            if (SpvHasOperandRange(opCode, operandWordStart, operandWordCount)) {
+            uint32_t operandWordStart, operandWordCount, operandWordStride;
+            if (SpvHasOperandRange(opCode, operandWordStart, operandWordCount, operandWordStride)) {
                 bool returnedToStack = false;
-                for (uint32_t i = 0; (i < operandWordCount) && ((operandWordStart + i) < resultWordCount); i++) {
-                    uint32_t operandResultId = optimizedWords[resultWordIndex + operandWordStart + i];
+                for (uint32_t i = 0; (i < operandWordCount) && ((operandWordStart + i * operandWordStride) < resultWordCount); i++) {
+                    uint32_t operandResultId = optimizedWords[resultWordIndex + operandWordStart + i * operandWordStride];
 
                     // The operand was patched out and is expected to be removed in a later pass.
                     if (operandResultId == UINT32_MAX) {
