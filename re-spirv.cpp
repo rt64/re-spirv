@@ -813,7 +813,7 @@ namespace respv {
                 // If the label is not as possible result, then reduce its block's degree.
                 for (uint32_t i = 3; i < wordCount; i += 2) {
                     if (operatorResolution.value.u32 == optimizedWords[wordIndex + i]) {
-                        finalBranchLabelId = optimizedWords[wordIndex + i];
+                        finalBranchLabelId = optimizedWords[wordIndex + i + 1];
                     }
                     else {
                         reduceBlockDegreeByLabel(optimizedWords[wordIndex + i + 1], instruction.blockIndex, c);

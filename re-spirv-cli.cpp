@@ -42,6 +42,12 @@ int main(int argc, char *argv[]) {
     auto endParsingTime = std::chrono::high_resolution_clock::now();
     std::vector<uint8_t> optimizedData;
     std::vector<respv::SpecConstant> specConstants = shader.specConstants;
+    specConstants[0].values[0] = 202973304U;
+    specConstants[1].values[0] = 1584128U;
+    specConstants[2].values[0] = 4229332576U;
+    specConstants[3].values[0] = 905772926U;
+    specConstants[4].values[0] = 680132622U;
+
     auto beginRunTime = std::chrono::high_resolution_clock::now();
     if (!respv::Optimizer::run(shader, specConstants.data(), specConstants.size(), optimizedData)) {
         fprintf(stderr, "Failed to optimize SPIR-V data from %s.\n", inputPath);
