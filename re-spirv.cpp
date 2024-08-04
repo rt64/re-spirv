@@ -17,10 +17,6 @@ namespace respv {
 
     static bool SpvHasOperandRange(SpvOp opCode, uint32_t &operandWordStart, uint32_t &operandWordCount) {
         switch (opCode) {
-        case SpvOpSelect:
-            operandWordStart = 3;
-            operandWordCount = 3;
-            return true;
         case SpvOpNot:
         case SpvOpBitcast:
             operandWordStart = 3;
@@ -31,6 +27,13 @@ namespace respv {
         case SpvOpIMul:
         case SpvOpUDiv:
         case SpvOpSDiv:
+            operandWordStart = 3;
+            operandWordCount = 2;
+            return true;
+        case SpvOpSelect:
+            operandWordStart = 3;
+            operandWordCount = 3;
+            return true;
         case SpvOpIEqual:
         case SpvOpINotEqual:
         case SpvOpUGreaterThan:
@@ -648,6 +651,19 @@ namespace respv {
             const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
             const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromUint32(firstResolution.value.i32 / secondResolution.value.i32);
+            break;
+        }
+        case SpvOpSelect: {
+            const Resolution &conditionResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 5]];
+            if (conditionResolution.type == Resolution::Type::Constant) {
+                resolution = (conditionResolution.value.u32 != 0) ? firstResolution : secondResolution;
+            }
+            else {
+                resolution.type = Resolution::Type::Variable;
+            }
+
             break;
         }
         case SpvOpIEqual: {
