@@ -673,19 +673,19 @@ namespace respv {
         case SpvOpShiftRightLogical: {
             const Resolution &baseResolution = resolutions[optimizedWords[resultWordIndex + 3]];
             const Resolution &shiftResolution = resolutions[optimizedWords[resultWordIndex + 4]];
-            resolution = Resolution::fromUint32(baseResolution.value.u32 << shiftResolution.value.u32);
+            resolution = Resolution::fromUint32(baseResolution.value.u32 >> shiftResolution.value.u32);
             break;
         }
         case SpvOpShiftRightArithmetic: {
             const Resolution &baseResolution = resolutions[optimizedWords[resultWordIndex + 3]];
             const Resolution &shiftResolution = resolutions[optimizedWords[resultWordIndex + 4]];
-            resolution = Resolution::fromInt32(baseResolution.value.i32 << shiftResolution.value.i32);
+            resolution = Resolution::fromInt32(baseResolution.value.i32 >> shiftResolution.value.i32);
             break;
         }
         case SpvOpShiftLeftLogical: {
             const Resolution &baseResolution = resolutions[optimizedWords[resultWordIndex + 3]];
             const Resolution &shiftResolution = resolutions[optimizedWords[resultWordIndex + 4]];
-            resolution = Resolution::fromUint32(baseResolution.value.u32 >> shiftResolution.value.u32);
+            resolution = Resolution::fromUint32(baseResolution.value.u32 << shiftResolution.value.u32);
             break;
         }
         case SpvOpBitwiseOr: {
