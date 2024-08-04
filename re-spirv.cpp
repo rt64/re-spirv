@@ -10,10 +10,10 @@
 
 #include "spirv/unified1/spirv.h"
 
-// TODO: Replace stderr handling with a consumer printer class.
-
 namespace respv {
     // Common.
+
+    static const uint32_t SpvNopWord = SpvOpNop | (1U << 16U);
 
     static bool SpvHasOperandRange(SpvOp opCode, uint32_t &operandWordStart, uint32_t &operandWordCount) {
         switch (opCode) {
@@ -442,6 +442,7 @@ namespace respv {
         std::vector<bool> &specIdRemoved;
         std::vector<uint32_t> &localBlockDegrees;
         std::vector<uint32_t> &localBlockReductions;
+        std::vector<bool> &localBlockHeadersModified;
         std::vector<uint8_t> &optimizedData;
 
         OptimizerContext() = delete;
@@ -490,44 +491,88 @@ namespace respv {
         c.optimizedData.resize(originalDataSize);
         memcpy(c.optimizedData.data(), c.shader.spirvWords, originalDataSize);
 
+        c.specIdRemoved.clear();
+
         c.localBlockDegrees.resize(c.shader.blockDegrees.size());
         memcpy(c.localBlockDegrees.data(), c.shader.blockDegrees.data(), c.localBlockDegrees.size() * sizeof(uint32_t));
 
         c.localBlockReductions.clear();
         c.localBlockReductions.resize(c.shader.blocks.size(), 0);
+
+        c.localBlockHeadersModified.clear();
+        c.localBlockHeadersModified.resize(c.shader.blocks.size(), false);
     }
 
-    static void reduceBlockDegree(uint32_t firstBlockIndex, OptimizerContext &c) {
+    struct ReduceIteration {
+        uint32_t blockIndex;
+        uint32_t fromBlockIndex;
+
+        ReduceIteration(uint32_t blockIndex, uint32_t fromBlockIndex) {
+            this->blockIndex = blockIndex;
+            this->fromBlockIndex = fromBlockIndex;
+        }
+    };
+
+    static void reduceBlockDegree(uint32_t firstBlockIndex, uint32_t firstFromBlockIndex, OptimizerContext &c) {
         assert(firstBlockIndex < c.localBlockDegrees.size());
 
-        thread_local std::vector<uint32_t> blockStack;
-        blockStack.emplace_back(firstBlockIndex);
+        thread_local std::vector<ReduceIteration> iterationStack;
+        iterationStack.emplace_back(firstBlockIndex, firstFromBlockIndex);
 
-        while (!blockStack.empty()) {
-            uint32_t blockIndex = blockStack.back();
-            blockStack.pop_back();
+        while (!iterationStack.empty()) {
+            ReduceIteration it = iterationStack.back();
+            iterationStack.pop_back();
 
             // A block's degree may become 0 because it's already been deleted from the graph.
-            if (c.localBlockDegrees[blockIndex] > 0) {
-                c.localBlockDegrees[blockIndex]--;
+            if (c.localBlockDegrees[it.blockIndex] > 0) {
+                c.localBlockDegrees[it.blockIndex]--;
 
                 // When a block's degree reaches zero, all adjacent blocks must also be decreased.
-                if (c.localBlockDegrees[blockIndex] == 0) {
-                    uint32_t listIndex = c.shader.blocks[blockIndex].adjacentListIndex;
+                if (c.localBlockDegrees[it.blockIndex] == 0) {
+                    uint32_t listIndex = c.shader.blocks[it.blockIndex].adjacentListIndex;
                     while (listIndex != UINT32_MAX) {
                         const ListNode &listNode = c.shader.listNodes[listIndex];
                         assert((listNode.idType == IdType::Block) && "Only blocks must exist in the adjacency list");
-                        blockStack.emplace_back(listNode.id);
+                        iterationStack.emplace_back(listNode.id, it.blockIndex);
                         listIndex = listNode.nextListIndex;
+                    }
+                }
+                // If the block hasn't been deleted yet, remove the incoming block from any OpPhi operators that show up inside the block.
+                else {
+                    const Block &fromBlock = c.shader.blocks[it.fromBlockIndex];
+                    uint32_t fromBlockWordIndex = c.shader.instructions[fromBlock.instructionIndex].wordIndex;
+                    uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
+                    uint32_t blockInstructionBound = c.shader.blocks[it.blockIndex].instructionIndex + c.shader.blocks[it.blockIndex].instructionCount;
+                    for (uint32_t i = c.shader.blocks[it.blockIndex].instructionIndex + 1; i < blockInstructionBound; i++) {
+                        uint32_t wordIndex = c.shader.instructions[i].wordIndex;
+                        SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
+                        uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
+                        if (opCode == SpvOpPhi) {
+                            // Patch the instruction with UINT32_MAX. This will be cleaned up later by the optimization pass.
+                            for (uint32_t j = 3; j < wordCount; j += 2) {
+                                if (optimizedWords[wordIndex + j + 1] == optimizedWords[fromBlockWordIndex + 1]) {
+                                    optimizedWords[wordIndex + j + 0] = UINT32_MAX;
+                                    optimizedWords[wordIndex + j + 1] = UINT32_MAX;
+                                    c.localBlockHeadersModified[it.blockIndex] = true;
+                                    break;
+                                }
+                            }
+                        }
+                        else if (opCode == SpvOpLine) {
+                            // OpLine is allowed but ignored.
+                        }
+                        else {
+                            break;
+                        }
                     }
                 }
             }
         }
     }
 
-    static void reduceBlockDegreeByLabel(uint32_t resultId, OptimizerContext &c) {
+    static void reduceBlockDegreeByLabel(uint32_t resultId, uint32_t fromBlockIndex, OptimizerContext &c) {
         const Instruction &instruction = c.shader.resultToInstruction(resultId);
-        reduceBlockDegree(instruction.blockIndex, c);
+        reduceBlockDegree(instruction.blockIndex, fromBlockIndex, c);
     }
 
     static void solveResult(uint32_t resultId, std::vector<Resolution> &resolutions, OptimizerContext &c) {
@@ -696,6 +741,12 @@ namespace respv {
                 bool returnedToStack = false;
                 for (uint32_t i = 0; (i < operandWordCount) && ((operandWordStart + i) < resultWordCount); i++) {
                     uint32_t operandResultId = optimizedWords[resultWordIndex + operandWordStart + i];
+
+                    // The operand was patched out and is expected to be removed in a later pass.
+                    if (operandResultId == UINT32_MAX) {
+                        continue;
+                    }
+
                     if (resolutions[operandResultId].type == Resolution::Type::Variable) {
                         resolution.type = Resolution::Type::Variable;
                         break;
@@ -750,11 +801,11 @@ namespace respv {
                 // Branch conditional only needs to choose either label depending on whether the result is true or false.
                 if (operatorResolution.value.u32) {
                     finalBranchLabelId = optimizedWords[wordIndex + 2];
-                    reduceBlockDegreeByLabel(optimizedWords[wordIndex + 3], c);
+                    reduceBlockDegreeByLabel(optimizedWords[wordIndex + 3], instruction.blockIndex, c);
                 }
                 else {
                     finalBranchLabelId = optimizedWords[wordIndex + 3];
-                    reduceBlockDegreeByLabel(optimizedWords[wordIndex + 2], c);
+                    reduceBlockDegreeByLabel(optimizedWords[wordIndex + 2], instruction.blockIndex, c);
                 }
             }
             else if (opCode == SpvOpSwitch) {
@@ -765,7 +816,7 @@ namespace respv {
                         finalBranchLabelId = optimizedWords[wordIndex + i];
                     }
                     else {
-                        reduceBlockDegreeByLabel(optimizedWords[wordIndex + i + 1], c);
+                        reduceBlockDegreeByLabel(optimizedWords[wordIndex + i + 1], instruction.blockIndex, c);
                     }
                 }
 
@@ -775,15 +826,30 @@ namespace respv {
                     finalBranchLabelId = optimizedWords[wordIndex + 2];
                 }
                 else {
-                    reduceBlockDegreeByLabel(optimizedWords[wordIndex + 2], c);
+                    reduceBlockDegreeByLabel(optimizedWords[wordIndex + 2], instruction.blockIndex, c);
                 }
             }
-
+            
             // Patch the terminator to be an unconditional branch. Reduce the block's size.
             if (finalBranchLabelId != UINT32_MAX) {
-                optimizedWords[wordIndex] = SpvOpBranch | (2U << 16U);
-                optimizedWords[wordIndex + 1] = finalBranchLabelId;
-                c.localBlockReductions[instruction.blockIndex] = (wordCount - 2) * sizeof(uint32_t);
+                uint32_t mergeInstructionIndex = c.shader.blocks[instruction.blockIndex].mergeInstructionIndex();
+                uint32_t mergeWordIndex = c.shader.instructions[mergeInstructionIndex].wordIndex;
+                SpvOp mergeOpCode = SpvOp(optimizedWords[mergeWordIndex] & 0xFFFFU);
+                uint32_t mergeWordCount = (optimizedWords[mergeWordIndex] >> 16U) & 0xFFFFU;
+
+                // If there's a selection merge before this branch, we place the unconditional branch in its place.
+                uint32_t patchWordIndex;
+                if (mergeOpCode == SpvOpSelectionMerge) {
+                    c.localBlockReductions[instruction.blockIndex] += mergeWordCount * sizeof(uint32_t);
+                    patchWordIndex = mergeWordIndex;
+                }
+                else {
+                    patchWordIndex = wordIndex;
+                }
+
+                optimizedWords[patchWordIndex] = SpvOpBranch | (2U << 16U);
+                optimizedWords[patchWordIndex + 1] = finalBranchLabelId;
+                c.localBlockReductions[instruction.blockIndex] += (wordCount - 2) * sizeof(uint32_t);
             }
         }
     }
@@ -916,7 +982,53 @@ namespace respv {
                 assert(c.localBlockReductions[i] <= blockSize && "Local block reduction can't be bigger than the block's size.");
                 blockSize -= c.localBlockReductions[i];
 
-                if ((blockSize > 0) && (optimizedDataSize != originalPosition)) {
+                if (blockSize == 0) {
+                    continue;
+                }
+
+                if (c.localBlockHeadersModified[i]) {
+                    // Compact any OpPhi operations that show up after the label that have invalid values.
+                    uint32_t blockInstructionBound = c.shader.blocks[i].instructionIndex + c.shader.blocks[i].instructionCount;
+                    for (uint32_t j = c.shader.blocks[i].instructionIndex; j < blockInstructionBound; j++) {
+                        uint32_t wordIndex = c.shader.instructions[j].wordIndex;
+                        SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
+                        uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
+                        uint32_t newWordCount = 3;
+                        size_t instructionSize = sizeof(uint32_t) * wordCount;
+                        if (opCode == SpvOpPhi) {
+                            // Compact and edit the instruction in place.
+                            for (uint32_t k = 3; k < wordCount; k += 2) {
+                                if (optimizedWords[wordIndex + k] == UINT32_MAX) {
+                                    continue;
+                                }
+
+                                optimizedWords[wordIndex + newWordCount + 0] = optimizedWords[wordIndex + k + 0];
+                                optimizedWords[wordIndex + newWordCount + 1] = optimizedWords[wordIndex + k + 1];
+                                newWordCount += 2;
+                            }
+
+                            optimizedWords[wordIndex] = opCode | (newWordCount << 16U);
+
+                            // Move the instruction.
+                            memmove(&c.optimizedData[optimizedDataSize], &optimizedWords[wordIndex], sizeof(uint32_t) * newWordCount);
+                            blockSize -= instructionSize;
+                            originalPosition += instructionSize;
+                            optimizedDataSize += sizeof(uint32_t) * newWordCount;
+                        }
+                        else if ((opCode == SpvOpLabel) || (opCode == SpvOpLine)) {
+                            // OpLine is allowed to be mixed in with OpPhis. Just move the instruction.
+                            memmove(&c.optimizedData[optimizedDataSize], &optimizedWords[wordIndex], instructionSize);
+                            blockSize -= instructionSize;
+                            originalPosition += instructionSize;
+                            optimizedDataSize += instructionSize;
+                        }
+                        else {
+                            break;
+                        }
+                    }
+                }
+
+                if (optimizedDataSize != originalPosition) {
                     memmove(&c.optimizedData[optimizedDataSize], &c.optimizedData[originalPosition], blockSize);
                 }
 
@@ -972,7 +1084,8 @@ namespace respv {
         thread_local std::vector<bool> specIdRemoved;
         thread_local std::vector<uint32_t> localBlockDegrees;
         thread_local std::vector<uint32_t> localBlockReductions;
-        OptimizerContext optimizerContext = { shader, newSpecConstants, newSpecConstantCount, specIdRemoved, localBlockDegrees, localBlockReductions, optimizedData };
+        thread_local std::vector<bool> localBlockHeadersModified;
+        OptimizerContext optimizerContext = { shader, newSpecConstants, newSpecConstantCount, specIdRemoved, localBlockDegrees, localBlockReductions, localBlockHeadersModified, optimizedData };
 
         // Initialize the shader data necessary for the optimization passes.
         prepareShaderData(optimizerContext);
@@ -986,61 +1099,5 @@ namespace respv {
         compactShader(optimizerContext);
 
         return true;
-    }
-
-    // Debugger.
-
-    struct Iteration {
-        uint32_t id = UINT32_MAX;
-        IdType idType = IdType::None;
-        uint32_t depth = 0;
-
-        Iteration() {
-            // Empty constructor.
-        }
-
-        Iteration(uint32_t id, IdType idType, uint32_t depth) {
-            this->id = id;
-            this->idType = idType;
-            this->depth = depth;
-        }
-    };
-
-    void Debugger::printTraversalFrom(const Shader &shader, uint32_t resultId) {
-        std::vector<Iteration> iterationStack;
-        iterationStack.emplace_back(resultId, IdType::Result, 0);
-        while (!iterationStack.empty()) {
-            Iteration it = iterationStack.back();
-            iterationStack.pop_back();
-
-            for (uint32_t i = 0; i < it.depth; i++) {
-                fprintf(stdout, "  ");
-            }
-
-            if (it.idType == IdType::Result) {
-                const Result &result = shader.results[it.id];
-                uint32_t resultWordIndex = shader.instructions[result.instructionIndex].wordIndex;
-                SpvOp opCode = SpvOp(shader.spirvWords[resultWordIndex] & 0xFFFFU);
-                fprintf(stdout, "[%d] %%%d = %s\n", result.instructionIndex, it.id, SpvOpToString(opCode));
-
-                uint32_t listIndex = result.adjacentListIndex;
-                while (listIndex != UINT32_MAX) {
-                    const ListNode &listNode = shader.listNodes[listIndex];
-                    iterationStack.emplace_back(listNode.id, listNode.idType, it.depth + 1);
-                    listIndex = listNode.nextListIndex;
-                }
-            }
-            else if (it.idType == IdType::Instruction) {
-                const Instruction &instruction = shader.instructions[it.id];
-                SpvOp opCode = SpvOp(shader.spirvWords[instruction.wordIndex] & 0xFFFFU);
-                fprintf(stdout, "[%d] %s\n", it.id, SpvOpToString(opCode));
-            }
-        }
-    }
-
-    void Debugger::printBlockStatistics(const Shader &shader) {
-        for (uint32_t i = 0; i < uint32_t(shader.blocks.size()); i++) {
-            fprintf(stdout, "[%d] [%d] Degree %d\n", shader.blocks[i].instructionIndex, shader.blocks[i].endInstructionIndex(), shader.blockDegrees[i]);
-        }
     }
 };

@@ -50,7 +50,23 @@ namespace respv {
     struct Decorator {
         uint32_t instructionIndex = UINT32_MAX;
 
+        Decorator() {
+            // Empty constructor.
+        }
+
         Decorator(uint32_t instructionIndex) {
+            this->instructionIndex = instructionIndex;
+        }
+    };
+
+    struct Phi {
+        uint32_t instructionIndex = UINT32_MAX;
+
+        Phi() {
+            // Empty constructor.
+        }
+
+        Phi(uint32_t instructionIndex) {
             this->instructionIndex = instructionIndex;
         }
     };
@@ -126,10 +142,5 @@ namespace respv {
 
     struct Optimizer {
         static bool run(const Shader &shader, const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData);
-    };
-
-    struct Debugger {
-        static void printTraversalFrom(const Shader &shader, uint32_t resultId);
-        static void printBlockStatistics(const Shader &shader);
     };
 };
