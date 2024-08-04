@@ -5,6 +5,8 @@
 #include "re-spirv.h"
 
 #include <cassert>
+#include <cstdio>
+#include <cstring>
 
 #define SPV_ENABLE_UTILITY_CODE
 
