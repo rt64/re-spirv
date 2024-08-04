@@ -42,11 +42,11 @@ int main(int argc, char *argv[]) {
     auto endParsingTime = std::chrono::high_resolution_clock::now();
     std::vector<uint8_t> optimizedData;
     std::vector<respv::SpecConstant> specConstants = shader.specConstants;
-    specConstants[0].values[0] = 5259844U;
-    specConstants[1].values[0] = 3120U;
-    specConstants[2].values[0] = 4233166497U;
-    specConstants[3].values[0] = 4294964217U;
-    specConstants[4].values[0] = 617305099U;
+    specConstants[0].values[0] = 3356565624U;
+    specConstants[1].values[0] = 1584128U;
+    specConstants[2].values[0] = 4229999620U;
+    specConstants[3].values[0] = 4279211007U;
+    specConstants[4].values[0] = 747626510U;
 
     auto beginRunTime = std::chrono::high_resolution_clock::now();
     if (!respv::Optimizer::run(shader, specConstants.data(), specConstants.size(), optimizedData)) {
