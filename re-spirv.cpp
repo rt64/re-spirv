@@ -29,6 +29,17 @@ namespace respv {
         case SpvOpSDiv:
             operandWordStart = 3;
             operandWordCount = 2;
+            return true;    
+        case SpvOpLogicalEqual:
+        case SpvOpLogicalNotEqual:
+        case SpvOpLogicalOr:
+        case SpvOpLogicalAnd:
+            operandWordStart = 3;
+            operandWordCount = 2;
+            return true;
+        case SpvOpLogicalNot:
+            operandWordStart = 3;
+            operandWordCount = 1;
             return true;
         case SpvOpSelect:
             operandWordStart = 3;
@@ -653,17 +664,40 @@ namespace respv {
             resolution = Resolution::fromUint32(firstResolution.value.i32 / secondResolution.value.i32);
             break;
         }
+        case SpvOpLogicalEqual: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool((firstResolution.value.u32 != 0) == (secondResolution.value.u32 != 0));
+            break;
+        }
+        case SpvOpLogicalNotEqual: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool((firstResolution.value.u32 != 0) != (secondResolution.value.u32 != 0));
+            break;
+        }
+        case SpvOpLogicalOr: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool((firstResolution.value.u32 != 0) || (secondResolution.value.u32 != 0));
+            break;
+        }
+        case SpvOpLogicalAnd: {
+            const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 4]];
+            resolution = Resolution::fromBool((firstResolution.value.u32 != 0) && (secondResolution.value.u32 != 0));
+            break;
+        }
+        case SpvOpLogicalNot: {
+            const Resolution &operandResolution = resolutions[optimizedWords[resultWordIndex + 3]];
+            resolution = Resolution::fromBool(operandResolution.value.u32 == 0);
+            break;
+        }
         case SpvOpSelect: {
             const Resolution &conditionResolution = resolutions[optimizedWords[resultWordIndex + 3]];
             const Resolution &firstResolution = resolutions[optimizedWords[resultWordIndex + 4]];
             const Resolution &secondResolution = resolutions[optimizedWords[resultWordIndex + 5]];
-            if (conditionResolution.type == Resolution::Type::Constant) {
-                resolution = (conditionResolution.value.u32 != 0) ? firstResolution : secondResolution;
-            }
-            else {
-                resolution.type = Resolution::Type::Variable;
-            }
-
+            resolution = (conditionResolution.value.u32 != 0) ? firstResolution : secondResolution;
             break;
         }
         case SpvOpIEqual: {
