@@ -100,6 +100,7 @@ namespace respv {
         std::vector<SpecConstant> specConstants;
         std::vector<uint32_t> specConstantsTargetIds;
         std::vector<uint32_t> specIdToConstantIndex;
+        std::vector<uint32_t> specIdToDecoratorIndex;
         std::vector<Instruction> instructions;
         std::vector<Result> results;
         std::vector<Decorator> decorators;
