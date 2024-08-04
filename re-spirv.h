@@ -2,6 +2,8 @@
 // re-spirv
 //
 
+#pragma once
+
 #include <memory>
 #include <vector>
 
