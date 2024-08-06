@@ -41,7 +41,8 @@ int main(int argc, char *argv[]) {
     
     auto endParsingTime = std::chrono::high_resolution_clock::now();
     std::vector<uint8_t> optimizedData;
-    std::vector<respv::SpecConstant> specConstants = shader.specConstants;
+    std::vector<respv::SpecConstant> specConstants;
+    specConstants.resize(5);
     specConstants[0].values[0] = 3356565624U;
     specConstants[1].values[0] = 1584128U;
     specConstants[2].values[0] = 4229999620U;

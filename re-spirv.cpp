@@ -13,115 +13,10 @@
 #include "spirv/unified1/spirv.h"
 
 namespace respv {
-    // Common.
-
+#if 0
     static const uint32_t SpvNopWord = SpvOpNop | (1U << 16U);
 
-    static bool SpvHasOperandRange(SpvOp opCode, uint32_t &operandWordStart, uint32_t &operandWordCount, uint32_t &operandWordStride) {
-        switch (opCode) {
-        case SpvOpNot:
-        case SpvOpBitcast:
-            operandWordStart = 3;
-            operandWordCount = 1;
-            operandWordStride = 1;
-            return true;
-        case SpvOpIAdd:
-        case SpvOpISub:
-        case SpvOpIMul:
-        case SpvOpUDiv:
-        case SpvOpSDiv:
-            operandWordStart = 3;
-            operandWordCount = 2;
-            operandWordStride = 1;
-            return true;    
-        case SpvOpLogicalEqual:
-        case SpvOpLogicalNotEqual:
-        case SpvOpLogicalOr:
-        case SpvOpLogicalAnd:
-            operandWordStart = 3;
-            operandWordCount = 2;
-            operandWordStride = 1;
-            return true;
-        case SpvOpLogicalNot:
-            operandWordStart = 3;
-            operandWordCount = 1;
-            operandWordStride = 1;
-            return true;
-        case SpvOpSelect:
-            operandWordStart = 3;
-            operandWordCount = 3;
-            operandWordStride = 1;
-            return true;
-        case SpvOpIEqual:
-        case SpvOpINotEqual:
-        case SpvOpUGreaterThan:
-        case SpvOpSGreaterThan:
-        case SpvOpUGreaterThanEqual:
-        case SpvOpSGreaterThanEqual:
-        case SpvOpULessThan:
-        case SpvOpSLessThan:
-        case SpvOpULessThanEqual:
-        case SpvOpSLessThanEqual:
-        case SpvOpShiftRightLogical:
-        case SpvOpShiftRightArithmetic:
-        case SpvOpShiftLeftLogical:
-        case SpvOpBitwiseOr:
-        case SpvOpBitwiseAnd:
-        case SpvOpBitwiseXor:
-            operandWordStart = 3;
-            operandWordCount = 2;
-            operandWordStride = 1;
-            return true;
-        case SpvOpPhi:
-            operandWordStart = 3;
-            operandWordCount = UINT32_MAX;
-            operandWordStride = 2;
-            return true;
-        case SpvOpBranchConditional:
-        case SpvOpSwitch:
-            operandWordStart = 1;
-            operandWordCount = 1;
-            operandWordStride = 1;
-            return true;
-        default:
-            operandWordStart = operandWordCount = operandWordStride = 0;
-            return false;
-        }
-    }
-
-    static bool SpvHasLabels(SpvOp opCode, uint32_t &labelWordStart, uint32_t &labelWordCount, uint32_t &labelWordStride) {
-        switch (opCode) {
-        case SpvOpBranch:
-            labelWordStart = 1;
-            labelWordCount = 1;
-            labelWordStride = 1;
-            return true;
-        case SpvOpBranchConditional:
-            labelWordStart = 2;
-            labelWordCount = 2;
-            labelWordStride = 1;
-            return true;
-        case SpvOpSwitch:
-            labelWordStart = 2;
-            labelWordCount = UINT32_MAX;
-            labelWordStride = 2;
-            return true;
-        default:
-            labelWordStart = labelWordCount = labelWordStride = 0;
-            return false;
-        }
-    }
-
     // Shader.
-
-    Shader::Shader() {
-        // Empty.
-
-    }
-
-    Shader::Shader(const void *data, size_t size) {
-        parse(data, size);
-    }
 
     void Shader::clear() {
         spirvWords = nullptr;
@@ -136,163 +31,6 @@ namespace respv {
         blockDegrees.clear();
         listNodes.clear();
         valid = false;
-    }
-
-    uint32_t Shader::addToList(uint32_t id, IdType idType, uint32_t listIndex) {
-        listNodes.emplace_back(id, idType, listIndex);
-        return uint32_t(listNodes.size() - 1);
-    }
-
-    bool Shader::parseWords(const void *data, size_t size) {
-        assert(data != nullptr);
-        assert(size > 0);
-
-        spirvWords = reinterpret_cast<const uint32_t *>(data);
-        spirvWordCount = size / sizeof(uint32_t);
-
-        const uint32_t startingWordIndex = 5;
-        if (spirvWordCount < startingWordIndex) {
-            fprintf(stderr, "Not enough words in SPIR-V.\n");
-            return false;
-        }
-
-        if (spirvWords[0] != SpvMagicNumber) {
-            fprintf(stderr, "Invalid SPIR-V Magic Number on header.\n");
-            return false;
-        }
-
-        if (spirvWords[1] > SpvVersion) {
-            fprintf(stderr, "SPIR-V Version is too new for the library. Max version for the library is 0x%X.\n", SpvVersion);
-            return false;
-        }
-
-        const uint32_t idBound = spirvWords[3];
-        instructions.reserve(idBound);
-        listNodes.reserve(idBound);
-        results.resize(idBound, Result());
-        results.shrink_to_fit();
-
-        // Parse all instructions.
-        uint32_t wordIndex = startingWordIndex;
-        Block activeBlock;
-        activeBlock.wordIndex = wordIndex;
-        while (wordIndex < spirvWordCount) {
-            uint32_t instructionIndex = uint32_t(instructions.size());
-            SpvOp opCode = SpvOp(spirvWords[wordIndex] & 0xFFFFU);
-            uint16_t wordCount = (spirvWords[wordIndex] >> 16U) & 0xFFFFU;
-
-            bool hasResult, hasType;
-            SpvHasResultAndType(opCode, &hasResult, &hasType);
-
-            uint32_t resultId = 0;
-            if (hasResult) {
-                resultId = spirvWords[wordIndex + (hasType ? 2 : 1)];
-                if (resultId >= idBound) {
-                    fprintf(stderr, "SPIR-V Parsing error. Invalid Result ID: %u.\n", resultId);
-                    return false;
-                }
-
-                assert(results[resultId].instructionIndex == UINT32_MAX && "Two instructions can't write to the same result.");
-                results[resultId].instructionIndex = instructionIndex;
-            }
-            else {
-                resultId = UINT32_MAX;
-            }
-
-            bool endBlock = false;
-            switch (opCode) {
-            case SpvOpDecorate:
-                decorators.emplace_back(instructionIndex);
-                break;
-            case SpvOpLabel:
-                // If a block is already in progress, it is only allowed if it's not labeled.
-                if (activeBlock.instructionCount > 0) {
-                    if (isBlockLabeled(activeBlock)) {
-                        fprintf(stderr, "SPIR-V Parsing error. A block can't be started while another block is in progress.\n");
-                        return false;
-                    }
-                    else {
-                        blocks.emplace_back(activeBlock);
-                    }
-                }
-
-                // Start a new labeled block.
-                activeBlock.wordIndex = wordIndex;
-                activeBlock.wordCount = 0;
-                activeBlock.instructionIndex = instructionIndex;
-                activeBlock.instructionCount = 0;
-                break;
-            case SpvOpBranch:
-            case SpvOpBranchConditional:
-            case SpvOpSwitch:
-            case SpvOpReturn:
-            case SpvOpReturnValue:
-            case SpvOpKill:
-            case SpvOpUnreachable:
-                if ((activeBlock.instructionCount == 0) || !isBlockLabeled(activeBlock)) {
-                    fprintf(stderr, "SPIR-V Parsing error. Encountered a termination instruction but no labeled block was in progress.\n");
-                    return false;
-                }
-                else {
-                    // Indicate the active block should be finished.
-                    endBlock = true;
-                }
-
-                break;
-            default:
-                // Ignore the rest.
-                break;
-            }
-
-            uint32_t operandWordStart, operandWordCount, operandWordStride;
-            if (SpvHasOperandRange(opCode, operandWordStart, operandWordCount, operandWordStride)) {
-                if (wordCount <= operandWordStart) {
-                    fprintf(stderr, "SPIR-V Parsing error. Instruction doesn't have enough words for operand count.\n");
-                    return false;
-                }
-
-                for (uint32_t i = 0; (i < operandWordCount) && ((operandWordStart + i * operandWordStride) < wordCount); i++) {
-                    uint32_t operandId = spirvWords[wordIndex + operandWordStart + i * operandWordStride];
-                    if (operandId >= idBound) {
-                        fprintf(stderr, "SPIR-V Parsing error. Invalid Operand ID: %u.\n", operandId);
-                        return false;
-                    }
-                    
-                    bool addResult = (resultId != UINT32_MAX);
-                    results[operandId].adjacentListIndex = addToList(addResult ? resultId : instructionIndex, addResult ? IdType::Result : IdType::Instruction, results[operandId].adjacentListIndex);
-                }
-            }
-
-            if (wordCount == 0) {
-                fprintf(stderr, "Unknown SPIR-V Parsing error.\n");
-                return false;
-            }
-
-            instructions.emplace_back(wordIndex, uint32_t(blocks.size()));
-            activeBlock.instructionCount++;
-            activeBlock.wordCount += wordCount;
-            wordIndex += wordCount;
-
-            if (endBlock) {
-                blocks.emplace_back(activeBlock);
-                activeBlock.wordIndex = wordIndex;
-                activeBlock.wordCount = 0;
-                activeBlock.instructionIndex = instructionIndex + 1;
-                activeBlock.instructionCount = 0;
-            }
-        }
-
-        if (activeBlock.instructionCount > 0) {
-            if (isBlockLabeled(activeBlock)) {
-                fprintf(stderr, "SPIR-V Parsing error. Last block of the shader was not finished.\n");
-                return false;
-            }
-            else {
-                blocks.emplace_back(activeBlock);
-            }
-        }
-
-        return true;
     }
 
     bool Shader::isBlockLabeled(const Block &block) const {
@@ -1204,4 +942,615 @@ namespace respv {
 
         return true;
     }
+#else
+    // Common.
+    
+    static bool SpvSupported(SpvOp opCode) {
+        switch (opCode) {
+        case SpvOpUndef:
+        case SpvOpSource:
+        case SpvOpName:
+        case SpvOpMemberName:
+        case SpvOpExtension:
+        case SpvOpExtInstImport:
+        case SpvOpExtInst:
+        case SpvOpMemoryModel:
+        case SpvOpEntryPoint:
+        case SpvOpExecutionMode:
+        case SpvOpCapability:
+        case SpvOpTypeVoid:
+        case SpvOpTypeBool:
+        case SpvOpTypeInt:
+        case SpvOpTypeFloat:
+        case SpvOpTypeVector:
+        case SpvOpTypeImage:
+        case SpvOpTypeSampler:
+        case SpvOpTypeSampledImage:
+        case SpvOpTypeArray:
+        case SpvOpTypeRuntimeArray:
+        case SpvOpTypeStruct:
+        case SpvOpTypePointer:
+        case SpvOpTypeFunction:
+        case SpvOpConstantTrue:
+        case SpvOpConstantFalse:
+        case SpvOpConstant:
+        case SpvOpConstantComposite:
+        case SpvOpSpecConstant:
+        case SpvOpFunction:
+        case SpvOpFunctionEnd:
+        case SpvOpVariable:
+        case SpvOpLoad:
+        case SpvOpStore:
+        case SpvOpAccessChain:
+        case SpvOpDecorate:
+        case SpvOpMemberDecorate:
+        case SpvOpVectorShuffle:
+        case SpvOpCompositeConstruct:
+        case SpvOpCompositeExtract:
+        case SpvOpCompositeInsert:
+        case SpvOpCopyObject:
+        case SpvOpSampledImage:
+        case SpvOpImageSampleExplicitLod:
+        case SpvOpImageFetch:
+        case SpvOpImageQuerySizeLod:
+        case SpvOpImageQueryLevels:
+        case SpvOpConvertFToU:
+        case SpvOpConvertFToS:
+        case SpvOpConvertSToF:
+        case SpvOpConvertUToF:
+        case SpvOpBitcast:
+        case SpvOpSNegate:
+        case SpvOpFNegate:
+        case SpvOpIAdd:
+        case SpvOpFAdd:
+        case SpvOpISub:
+        case SpvOpFSub:
+        case SpvOpIMul:
+        case SpvOpFMul:
+        case SpvOpUDiv:
+        case SpvOpSDiv:
+        case SpvOpFDiv:
+        case SpvOpUMod:
+        case SpvOpSRem:
+        case SpvOpSMod:
+        case SpvOpFRem:
+        case SpvOpFMod:
+        case SpvOpVectorTimesScalar:
+        case SpvOpMatrixTimesScalar:
+        case SpvOpVectorTimesMatrix:
+        case SpvOpMatrixTimesVector:
+        case SpvOpMatrixTimesMatrix:
+        case SpvOpOuterProduct:
+        case SpvOpDot:
+        case SpvOpIAddCarry:
+        case SpvOpISubBorrow:
+        case SpvOpUMulExtended:
+        case SpvOpSMulExtended:
+        case SpvOpAll:
+        case SpvOpLogicalEqual:
+        case SpvOpLogicalNotEqual:
+        case SpvOpLogicalOr:
+        case SpvOpLogicalAnd:
+        case SpvOpLogicalNot:
+        case SpvOpSelect:
+        case SpvOpIEqual:
+        case SpvOpINotEqual:
+        case SpvOpUGreaterThan:
+        case SpvOpSGreaterThan:
+        case SpvOpUGreaterThanEqual:
+        case SpvOpSGreaterThanEqual:
+        case SpvOpULessThan:
+        case SpvOpSLessThan:
+        case SpvOpULessThanEqual:
+        case SpvOpSLessThanEqual:
+        case SpvOpFOrdEqual:
+        case SpvOpFUnordEqual:
+        case SpvOpFOrdNotEqual:
+        case SpvOpFUnordNotEqual:
+        case SpvOpFOrdLessThan:
+        case SpvOpFUnordLessThan:
+        case SpvOpFOrdGreaterThan:
+        case SpvOpFUnordGreaterThan:
+        case SpvOpFOrdLessThanEqual:
+        case SpvOpFUnordLessThanEqual:
+        case SpvOpFOrdGreaterThanEqual:
+        case SpvOpFUnordGreaterThanEqual:
+        case SpvOpShiftRightLogical:
+        case SpvOpShiftRightArithmetic:
+        case SpvOpShiftLeftLogical:
+        case SpvOpBitwiseOr:
+        case SpvOpBitwiseXor:
+        case SpvOpBitwiseAnd:
+        case SpvOpNot:
+        case SpvOpDPdx:
+        case SpvOpDPdy:
+        case SpvOpPhi:
+        case SpvOpSelectionMerge:
+        case SpvOpLabel:
+        case SpvOpBranch:
+        case SpvOpBranchConditional:
+        case SpvOpSwitch:
+        case SpvOpKill:
+        case SpvOpReturn:
+        case SpvOpUnreachable:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    static bool SpvHasOperands(SpvOp opCode, uint32_t &operandWordStart, uint32_t &operandWordCount, uint32_t &operandWordStride, uint32_t &operandWordSkip) {
+        switch (opCode) {
+        case SpvOpExecutionMode:
+        case SpvOpDecorate:
+        case SpvOpMemberDecorate:
+        case SpvOpBranchConditional:
+        case SpvOpSwitch:
+            operandWordStart = 1;
+            operandWordCount = 1;
+            operandWordStride = 1;
+            operandWordSkip = UINT32_MAX;
+            return true;
+        case SpvOpStore:
+            operandWordStart = 1;
+            operandWordCount = 2;
+            operandWordStride = 1;
+            operandWordSkip = UINT32_MAX;
+            return true;
+        case SpvOpTypeVector:
+        case SpvOpTypeImage:
+        case SpvOpTypeSampledImage:
+        case SpvOpTypeRuntimeArray:
+            operandWordStart = 2;
+            operandWordCount = 1;
+            operandWordStride = 1;
+            operandWordSkip = UINT32_MAX;
+            return true;
+        case SpvOpTypeArray:
+            operandWordStart = 2;
+            operandWordCount = 2;
+            operandWordStride = 1;
+            operandWordSkip = UINT32_MAX;
+            return true;
+        case SpvOpTypeStruct:
+        case SpvOpTypeFunction:
+            operandWordStart = 2;
+            operandWordCount = UINT32_MAX;
+            operandWordStride = 1;
+            operandWordSkip = UINT32_MAX;
+            return true;
+        case SpvOpEntryPoint:
+            operandWordStart = 2;
+            operandWordCount = UINT32_MAX;
+            operandWordStride = 1;
+            operandWordSkip = 1;
+            return true;
+        case SpvOpTypePointer:
+        case SpvOpLoad:
+        case SpvOpCompositeExtract:
+        case SpvOpCopyObject:
+        case SpvOpImageQueryLevels:
+        case SpvOpConvertFToU:
+        case SpvOpConvertFToS:
+        case SpvOpConvertSToF:
+        case SpvOpConvertUToF:
+        case SpvOpBitcast:
+        case SpvOpSNegate:
+        case SpvOpFNegate:
+        case SpvOpAll:
+        case SpvOpLogicalNot:
+        case SpvOpNot:
+        case SpvOpDPdx:
+        case SpvOpDPdy:
+            operandWordStart = 3;
+            operandWordCount = 1;
+            operandWordStride = 1;
+            operandWordSkip = UINT32_MAX;
+            return true;
+        case SpvOpVectorShuffle:
+        case SpvOpCompositeInsert:
+        case SpvOpSampledImage:
+        case SpvOpImageQuerySizeLod:
+        case SpvOpIAdd:
+        case SpvOpFAdd:
+        case SpvOpISub:
+        case SpvOpFSub:
+        case SpvOpIMul:
+        case SpvOpFMul:
+        case SpvOpUDiv:
+        case SpvOpSDiv:
+        case SpvOpFDiv:
+        case SpvOpUMod:
+        case SpvOpSRem:
+        case SpvOpSMod:
+        case SpvOpFRem:
+        case SpvOpFMod:
+        case SpvOpVectorTimesScalar:
+        case SpvOpMatrixTimesScalar:
+        case SpvOpVectorTimesMatrix:
+        case SpvOpMatrixTimesVector:
+        case SpvOpMatrixTimesMatrix:
+        case SpvOpOuterProduct:
+        case SpvOpDot:
+        case SpvOpIAddCarry:
+        case SpvOpISubBorrow:
+        case SpvOpUMulExtended:
+        case SpvOpSMulExtended:
+        case SpvOpLogicalEqual:
+        case SpvOpLogicalNotEqual:
+        case SpvOpLogicalOr:
+        case SpvOpLogicalAnd:
+        case SpvOpIEqual:
+        case SpvOpINotEqual:
+        case SpvOpUGreaterThan:
+        case SpvOpSGreaterThan:
+        case SpvOpUGreaterThanEqual:
+        case SpvOpSGreaterThanEqual:
+        case SpvOpULessThan:
+        case SpvOpSLessThan:
+        case SpvOpULessThanEqual:
+        case SpvOpSLessThanEqual:
+        case SpvOpFOrdEqual:
+        case SpvOpFUnordEqual:
+        case SpvOpFOrdNotEqual:
+        case SpvOpFUnordNotEqual:
+        case SpvOpFOrdLessThan:
+        case SpvOpFUnordLessThan:
+        case SpvOpFOrdGreaterThan:
+        case SpvOpFUnordGreaterThan:
+        case SpvOpFOrdLessThanEqual:
+        case SpvOpFUnordLessThanEqual:
+        case SpvOpFOrdGreaterThanEqual:
+        case SpvOpFUnordGreaterThanEqual:
+        case SpvOpShiftRightLogical:
+        case SpvOpShiftRightArithmetic:
+        case SpvOpShiftLeftLogical:
+        case SpvOpBitwiseOr:
+        case SpvOpBitwiseAnd:
+        case SpvOpBitwiseXor:
+            operandWordStart = 3;
+            operandWordCount = 2;
+            operandWordStride = 1;
+            operandWordSkip = UINT32_MAX;
+            return true;
+        case SpvOpSelect:
+            operandWordStart = 3;
+            operandWordCount = 3;
+            operandWordStride = 1;
+            operandWordSkip = UINT32_MAX;
+            return true;
+        case SpvOpConstantComposite:
+        case SpvOpAccessChain:
+        case SpvOpCompositeConstruct:
+            operandWordStart = 3;
+            operandWordCount = UINT32_MAX;
+            operandWordStride = 1;
+            operandWordSkip = UINT32_MAX;
+            return true;
+        case SpvOpExtInst:
+            operandWordStart = 3;
+            operandWordCount = UINT32_MAX;
+            operandWordStride = 1;
+            operandWordSkip = 1;
+            return true;
+        case SpvOpImageSampleExplicitLod:
+        case SpvOpImageFetch:
+            operandWordStart = 3;
+            operandWordCount = UINT32_MAX;
+            operandWordStride = 1;
+            operandWordSkip = 2;
+            return true;
+        case SpvOpPhi:
+            operandWordStart = 3;
+            operandWordCount = UINT32_MAX;
+            operandWordStride = 2;
+            operandWordSkip = UINT32_MAX;
+            return true;
+        case SpvOpFunction:
+        case SpvOpVariable:
+            operandWordStart = 4;
+            operandWordCount = 1;
+            operandWordStride = 1;
+            operandWordSkip = UINT32_MAX;
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    static bool SpvHasLabels(SpvOp opCode, uint32_t &labelWordStart, uint32_t &labelWordCount, uint32_t &labelWordStride) {
+        switch (opCode) {
+        case SpvOpSelectionMerge:
+        case SpvOpBranch:
+            labelWordStart = 1;
+            labelWordCount = 1;
+            labelWordStride = 1;
+            return true;
+        case SpvOpBranchConditional:
+            labelWordStart = 2;
+            labelWordCount = 2;
+            labelWordStride = 1;
+            return true;
+        case SpvOpSwitch:
+            labelWordStart = 2;
+            labelWordCount = UINT32_MAX;
+            labelWordStride = 2;
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // Shader
+
+    Shader::Shader() {
+        // Empty.
+    }
+
+    Shader::Shader(const void *data, size_t size) {
+        parse(data, size);
+    }
+
+    void Shader::clear() {
+        spirvWords = nullptr;
+        spirvWordCount = 0;
+        instructions.clear();
+        results.clear();
+        listNodes.clear();
+    }
+
+    uint32_t Shader::addToList(uint32_t instructionIndex, uint32_t listIndex) {
+        listNodes.emplace_back(instructionIndex, listIndex);
+        return uint32_t(listNodes.size() - 1);
+    }
+
+    bool Shader::parseWords(const void *data, size_t size) {
+        assert(data != nullptr);
+        assert(size > 0);
+
+        spirvWords = reinterpret_cast<const uint32_t *>(data);
+        spirvWordCount = size / sizeof(uint32_t);
+
+        const uint32_t startingWordIndex = 5;
+        if (spirvWordCount < startingWordIndex) {
+            fprintf(stderr, "Not enough words in SPIR-V.\n");
+            return false;
+        }
+
+        if (spirvWords[0] != SpvMagicNumber) {
+            fprintf(stderr, "Invalid SPIR-V Magic Number on header.\n");
+            return false;
+        }
+
+        if (spirvWords[1] > SpvVersion) {
+            fprintf(stderr, "SPIR-V Version is too new for the library. Max version for the library is 0x%X.\n", SpvVersion);
+            return false;
+        }
+
+        const uint32_t idBound = spirvWords[3];
+        instructions.reserve(idBound);
+        listNodes.reserve(idBound);
+        results.resize(idBound, Result());
+        results.shrink_to_fit();
+
+        // Parse all instructions.
+        uint32_t wordIndex = startingWordIndex;
+        while (wordIndex < spirvWordCount) {
+            SpvOp opCode = SpvOp(spirvWords[wordIndex] & 0xFFFFU);
+            uint16_t wordCount = (spirvWords[wordIndex] >> 16U) & 0xFFFFU;
+
+            bool hasResult, hasType;
+            SpvHasResultAndType(opCode, &hasResult, &hasType);
+
+            if (hasResult) {
+                uint32_t resultId = spirvWords[wordIndex + (hasType ? 2 : 1)];
+                if (resultId >= idBound) {
+                    fprintf(stderr, "SPIR-V Parsing error. Invalid Result ID: %u.\n", resultId);
+                    return false;
+                }
+
+                results[resultId].instructionIndex = uint32_t(instructions.size());
+            }
+
+            instructions.emplace_back(wordIndex);
+            wordIndex += wordCount;
+        }
+
+        return true;
+
+        /*
+        Block activeBlock;
+        activeBlock.wordIndex = wordIndex;
+        while (wordIndex < spirvWordCount) {
+            bool endBlock = false;
+            switch (opCode) {
+            case SpvOpDecorate:
+                decorators.emplace_back(instructionIndex);
+                break;
+            case SpvOpLabel:
+                // If a block is already in progress, it is only allowed if it's not labeled.
+                if (activeBlock.instructionCount > 0) {
+                    if (isBlockLabeled(activeBlock)) {
+                        fprintf(stderr, "SPIR-V Parsing error. A block can't be started while another block is in progress.\n");
+                        return false;
+                    }
+                    else {
+                        blocks.emplace_back(activeBlock);
+                    }
+                }
+
+                // Start a new labeled block.
+                activeBlock.wordIndex = wordIndex;
+                activeBlock.wordCount = 0;
+                activeBlock.instructionIndex = instructionIndex;
+                activeBlock.instructionCount = 0;
+                break;
+            case SpvOpBranch:
+            case SpvOpBranchConditional:
+            case SpvOpSwitch:
+            case SpvOpReturn:
+            case SpvOpReturnValue:
+            case SpvOpKill:
+            case SpvOpUnreachable:
+                if ((activeBlock.instructionCount == 0) || !isBlockLabeled(activeBlock)) {
+                    fprintf(stderr, "SPIR-V Parsing error. Encountered a termination instruction but no labeled block was in progress.\n");
+                    return false;
+                }
+                else {
+                    // Indicate the active block should be finished.
+                    endBlock = true;
+                }
+
+                break;
+            default:
+                // Ignore the rest.
+                break;
+            }
+
+            if (wordCount == 0) {
+                fprintf(stderr, "Unknown SPIR-V Parsing error.\n");
+                return false;
+            }
+
+            instructions.emplace_back(wordIndex, uint32_t(blocks.size()));
+            activeBlock.instructionCount++;
+            activeBlock.wordCount += wordCount;
+
+            if (endBlock) {
+                blocks.emplace_back(activeBlock);
+                activeBlock.wordIndex = wordIndex;
+                activeBlock.wordCount = 0;
+                activeBlock.instructionIndex = instructionIndex + 1;
+                activeBlock.instructionCount = 0;
+            }
+        }
+
+        if (activeBlock.instructionCount > 0) {
+            if (isBlockLabeled(activeBlock)) {
+                fprintf(stderr, "SPIR-V Parsing error. Last block of the shader was not finished.\n");
+                return false;
+            }
+            else {
+                blocks.emplace_back(activeBlock);
+            }
+        }
+
+        return true;
+        */
+    }
+
+    bool Shader::buildAdjacencyLists() {
+        instructionDegrees.clear();
+        instructionDegrees.resize(instructions.size(), 0);
+
+        for (uint32_t i = 0; i < uint32_t(instructions.size()); i++) {
+            uint32_t wordIndex = instructions[i].wordIndex;
+            SpvOp opCode = SpvOp(spirvWords[wordIndex] & 0xFFFFU);
+            uint16_t wordCount = (spirvWords[wordIndex] >> 16U) & 0xFFFFU;
+            if (!SpvSupported(opCode)) {
+                fprintf(stderr, "%s is not supported yet.\n", SpvOpToString(opCode));
+                return false;
+            }
+
+            bool hasResult, hasType;
+            SpvHasResultAndType(opCode, &hasResult, &hasType);
+            if (hasType) {
+                uint32_t typeId = spirvWords[wordIndex + 1];
+                if (typeId >= results.size()) {
+                    fprintf(stderr, "SPIR-V Parsing error. Invalid Type ID: %u.\n", typeId);
+                    return false;
+                }
+
+                if (results[typeId].instructionIndex == UINT32_MAX) {
+                    fprintf(stderr, "SPIR-V Parsing error. Result %u is not valid.\n", typeId);
+                    return false;
+                }
+
+                uint32_t resultIndex = results[typeId].instructionIndex;
+                instructions[resultIndex].adjacentListIndex = addToList(i, instructions[resultIndex].adjacentListIndex);
+                instructionDegrees[i]++;
+            }
+
+            // Every operand should be adjacent to this instruction.
+            uint32_t operandWordStart, operandWordCount, operandWordStride, operandWordSkip;
+            if (SpvHasOperands(opCode, operandWordStart, operandWordCount, operandWordStride, operandWordSkip)) {
+                uint32_t operandWordIndex = operandWordStart;
+                for (uint32_t j = 0; j < operandWordCount; j++) {
+                    if (j == operandWordSkip) {
+                        operandWordIndex++;
+                        continue;
+                    }
+
+                    if (operandWordIndex >= wordCount) {
+                        break;
+                    }
+
+                    uint32_t operandId = spirvWords[wordIndex + operandWordIndex];
+                    if (operandId >= results.size()) {
+                        fprintf(stderr, "SPIR-V Parsing error. Invalid Operand ID: %u.\n", operandId);
+                        return false;
+                    }
+
+                    if (results[operandId].instructionIndex == UINT32_MAX) {
+                        fprintf(stderr, "SPIR-V Parsing error. Result %u is not valid.\n", operandId);
+                        return false;
+                    }
+
+                    uint32_t resultIndex = results[operandId].instructionIndex;
+                    instructions[resultIndex].adjacentListIndex = addToList(i, instructions[resultIndex].adjacentListIndex);
+                    instructionDegrees[i]++;
+                    operandWordIndex += operandWordStride;
+                }
+            }
+
+            // This instruction should be adjacent to every label referenced. OpPhi is excluded from this.
+            uint32_t labelWordStart, labelWordCount, labelWordStride;
+            if (SpvHasLabels(opCode, labelWordStart, labelWordCount, labelWordStride)) {
+                for (uint32_t j = 0; (j < labelWordCount) && ((labelWordStart + j * labelWordStride) < wordCount); j++) {
+                    uint32_t labelId = spirvWords[wordIndex + labelWordStart + j * labelWordStride];
+                    if (labelId >= results.size()) {
+                        fprintf(stderr, "SPIR-V Parsing error. Invalid Operand ID: %u.\n", labelId);
+                        return false;
+                    }
+
+                    if (results[labelId].instructionIndex == UINT32_MAX) {
+                        fprintf(stderr, "SPIR-V Parsing error. Result %u is not valid.\n", labelId);
+                        return false;
+                    }
+
+                    uint32_t labelIndex = results[labelId].instructionIndex;
+                    instructions[i].adjacentListIndex = addToList(labelIndex, instructions[i].adjacentListIndex);
+                    instructionDegrees[labelIndex]++;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    bool Shader::parse(const void *data, size_t size) {
+        assert(data != nullptr);
+        assert((size % sizeof(uint32_t) == 0) && "Size of data must be aligned to the word size.");
+
+        clear();
+
+        if (!parseWords(data, size)) {
+            return false;
+        }
+
+        if (!buildAdjacencyLists()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    bool Shader::empty() const {
+        return false;
+    }
+
+    bool Optimizer::run(const Shader &shader, const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData) {
+        return false;
+    }
+#endif
 };

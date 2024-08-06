@@ -8,47 +8,7 @@
 #include <vector>
 
 namespace respv {
-    struct SpecConstant {
-        uint32_t specId = 0;
-        std::vector<uint32_t> values;
-
-        SpecConstant() {
-            // Empty constructor.
-        }
-
-        SpecConstant(uint32_t specId, const std::vector<uint32_t> &values) {
-            this->specId = specId;
-            this->values = values;
-        }
-    };
-
-    struct Instruction {
-        uint32_t wordIndex = UINT32_MAX;
-        uint32_t blockIndex = UINT32_MAX;
-
-        Instruction() {
-            // Empty constructor.
-        }
-
-        Instruction(uint32_t wordIndex, uint32_t blockIndex) {
-            this->wordIndex = wordIndex;
-            this->blockIndex = blockIndex;
-        }
-    };
-
-    struct Result {
-        uint32_t instructionIndex = UINT32_MAX;
-        uint32_t adjacentListIndex = UINT32_MAX;
-
-        Result() {
-            // Empty constructor.
-        }
-
-        Result(uint32_t instructionIndex) {
-            this->instructionIndex = instructionIndex;
-        }
-    };
-
+#if 0
     struct Decorator {
         uint32_t instructionIndex = UINT32_MAX;
 
@@ -96,18 +56,64 @@ namespace respv {
         Instruction
     };
 
-    struct ListNode {
-        uint32_t id = UINT32_MAX;
-        IdType idType = IdType::None;
-        uint32_t nextListIndex = UINT32_MAX;
+    struct Shader {
+        std::vector<SpecConstant> specConstants;
+        std::vector<uint32_t> specConstantsTargetIds;
+        std::vector<uint32_t> specIdToConstantIndex;
+        std::vector<uint32_t> specIdToDecoratorIndex;
+        std::vector<Decorator> decorators;
+        std::vector<Block> blocks;
+        std::vector<uint32_t> blockDegrees;
 
-        ListNode() {
+        bool isBlockLabeled(const Block &block) const;
+        bool processBlockAdjacentTo(Block &block, uint32_t labelId);
+        bool processBlocks();
+        bool processDecorators();
+        const Instruction resultToInstruction(uint32_t resultId) const;
+        uint32_t resultToWordIndex(uint32_t resultId) const;
+    };
+#endif
+    struct SpecConstant {
+        uint32_t specId = 0;
+        std::vector<uint32_t> values;
+
+        SpecConstant() {
             // Empty constructor.
         }
 
-        ListNode(uint32_t id, IdType idType, uint32_t nextListIndex) {
-            this->id = id;
-            this->idType = idType;
+        SpecConstant(uint32_t specId, const std::vector<uint32_t> &values) {
+            this->specId = specId;
+            this->values = values;
+        }
+    };
+
+    struct Instruction {
+        uint32_t wordIndex = UINT32_MAX;
+        uint32_t adjacentListIndex = UINT32_MAX;
+
+        Instruction(uint32_t wordIndex) {
+            this->wordIndex = wordIndex;
+        }
+    };
+
+    struct Result {
+        uint32_t instructionIndex = UINT32_MAX;
+
+        Result() {
+            // Empty.
+        }
+
+        Result(uint32_t instructionIndex) {
+            this->instructionIndex = instructionIndex;
+        }
+    };
+
+    struct ListNode {
+        uint32_t instructionIndex = UINT32_MAX;
+        uint32_t nextListIndex = UINT32_MAX;
+
+        ListNode(uint32_t instructionIndex, uint32_t nextListIndex) {
+            this->instructionIndex = instructionIndex;
             this->nextListIndex = nextListIndex;
         }
     };
@@ -115,31 +121,19 @@ namespace respv {
     struct Shader {
         const uint32_t *spirvWords = nullptr;
         size_t spirvWordCount = 0;
-        std::vector<SpecConstant> specConstants;
-        std::vector<uint32_t> specConstantsTargetIds;
-        std::vector<uint32_t> specIdToConstantIndex;
-        std::vector<uint32_t> specIdToDecoratorIndex;
         std::vector<Instruction> instructions;
+        std::vector<uint32_t> instructionDegrees;
         std::vector<Result> results;
-        std::vector<Decorator> decorators;
-        std::vector<Block> blocks;
-        std::vector<uint32_t> blockDegrees;
         std::vector<ListNode> listNodes;
-        bool valid = false;
 
         Shader();
         Shader(const void *data, size_t size);
         void clear();
-        uint32_t addToList(uint32_t id, IdType idType, uint32_t listIndex);
+        uint32_t addToList(uint32_t instructionIndex, uint32_t listIndex);
         bool parseWords(const void *data, size_t size);
-        bool isBlockLabeled(const Block &block) const;
-        bool processBlockAdjacentTo(Block &block, uint32_t labelId);
-        bool processBlocks();
-        bool processDecorators();
         bool parse(const void *data, size_t size);
+        bool buildAdjacencyLists();
         bool empty() const;
-        const Instruction resultToInstruction(uint32_t resultId) const;
-        uint32_t resultToWordIndex(uint32_t resultId) const;
     };
 
     struct Optimizer {
