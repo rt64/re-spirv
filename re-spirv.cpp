@@ -927,38 +927,15 @@ namespace respv {
             resolution = Resolution::fromUint32(~operandResolution.value.u32);
             break;
         }
-
         case SpvOpPhi: {
-            resolution.type = Resolution::Type::Variable;
-
-            /*
-            const Block &fromBlock = c.shader.blocks[it.fromBlockIndex];
-            uint32_t fromBlockWordIndex = c.shader.instructions[fromBlock.instructionIndex].wordIndex;
-            uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
-            uint32_t blockInstructionBound = c.shader.blocks[it.blockIndex].instructionIndex + c.shader.blocks[it.blockIndex].instructionCount;
-            for (uint32_t i = c.shader.blocks[it.blockIndex].instructionIndex + 1; i < blockInstructionBound; i++) {
-                uint32_t wordIndex = c.shader.instructions[i].wordIndex;
-                SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
-                uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
-                if (opCode == SpvOpPhi) {
-                    // Patch the instruction with UINT32_MAX. This will be cleaned up later by the optimization pass.
-                    for (uint32_t j = 3; j < wordCount; j += 2) {
-                        if ( == optimizedWords[fromBlockWordIndex + 1]) {
-                            optimizedWords[wordIndex + j + 0] = UINT32_MAX;
-                            optimizedWords[wordIndex + j + 1] = UINT32_MAX;
-                            c.localBlockHeadersModified[it.blockIndex] = true;
-                            break;
-                        }
-                    }
-                }
-                else if (opCode == SpvOpLine) {
-                    // OpLine is allowed but ignored.
-                }
-                else {
-                    break;
-                }
+            // Resolve as constant if Phi operator was compacted to only one option.
+            if (wordCount == 5) {
+                resolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
             }
-            */
+            else {
+                resolution.type = Resolution::Type::Variable;
+            }
+
             break;
         }
         default:
@@ -1259,6 +1236,14 @@ namespace respv {
         uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
         uint32_t optimizedWordCount = 0;
         uint32_t instructionCount = c.shader.instructions.size();
+
+        // Copy the header.
+        const uint32_t startingWordIndex = 5;
+        for (uint32_t i = 0; i < startingWordIndex; i++) {
+            optimizedWords[optimizedWordCount++] = optimizedWords[i];
+        }
+
+        // Write out all the words for all the instructions and skip any that were marked as deleted.
         for (uint32_t i = 0; i < instructionCount; i++) {
             uint32_t wordIndex = c.shader.instructions[i].wordIndex;
 
