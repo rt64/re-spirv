@@ -4,6 +4,7 @@
 
 #include "re-spirv.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -549,6 +550,31 @@ namespace respv {
         return true;
     }
 
+    struct InstructionSort {
+        uint32_t instructionIndex = 0;
+        uint32_t instructionLevel = 0;
+
+        InstructionSort() {
+            // Empty.
+        }
+
+        InstructionSort(uint32_t instructionIndex, uint32_t instructionLevel) {
+            this->instructionIndex = instructionIndex;
+            this->instructionLevel = instructionLevel;
+        }
+
+        bool operator<(const InstructionSort &i) const {
+            if (instructionLevel < i.instructionLevel) {
+                return true;
+            }
+            else if (instructionLevel > i.instructionLevel) {
+                return false;
+            }
+
+            return instructionIndex < i.instructionIndex;
+        }
+    };
+
     bool Shader::sortInstructionGraph() {
         // Count the in and out degrees for all instructions.
         instructionInDegrees.clear();
@@ -566,12 +592,12 @@ namespace respv {
         }
 
         // Make a copy of the degrees as they'll be used to perform a topological sort.
-        thread_local std::vector<uint32_t> sortDegrees;
+        std::vector<uint32_t> sortDegrees;
         sortDegrees.resize(instructionInDegrees.size());
         memcpy(sortDegrees.data(), instructionInDegrees.data(), sizeof(uint32_t) *sortDegrees.size());
 
         // The first nodes to be processed should be the ones with no incoming connections.
-        thread_local std::vector<uint32_t> instructionStack;
+        std::vector<uint32_t> instructionStack;
         instructionStack.clear();
         for (uint32_t i = 0; i < uint32_t(instructions.size()); i++) {
             if (sortDegrees[i] == 0) {
@@ -599,6 +625,30 @@ namespace respv {
 
                 listIndex = listNode.nextListIndex;
             }
+        }
+
+        std::vector<InstructionSort> instructionSortVector;
+        instructionSortVector.clear();
+        instructionSortVector.resize(instructionOrder.size(), InstructionSort());
+        for (uint32_t instructionIndex : instructionOrder) {
+            uint32_t nextLevel = instructionSortVector[instructionIndex].instructionLevel + 1;
+            uint32_t listIndex = instructions[instructionIndex].adjacentListIndex;
+            while (listIndex != UINT32_MAX) {
+                const ListNode &listNode = listNodes[listIndex];
+                uint32_t &listLevel = instructionSortVector[listNode.instructionIndex].instructionLevel;
+                listLevel = std::max(listLevel, nextLevel);
+                listIndex = listNode.nextListIndex;
+            }
+
+            instructionSortVector[instructionIndex].instructionIndex = instructionIndex;
+        }
+
+        std::sort(instructionSortVector.begin(), instructionSortVector.end());
+        
+        // Rebuild the instruction order vector with the sorted indices.
+        instructionOrder.clear();
+        for (InstructionSort &instructionSort : instructionSortVector) {
+            instructionOrder.emplace_back(instructionSort.instructionIndex);
         }
 
         return true;
