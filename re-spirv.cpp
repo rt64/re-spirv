@@ -17,7 +17,7 @@
 namespace respv {
     // Common.
     
-    static bool SpvSupported(SpvOp opCode) {
+    static bool SpvIsSupported(SpvOp opCode) {
         switch (opCode) {
         case SpvOpUndef:
         case SpvOpSource:
@@ -145,6 +145,17 @@ namespace respv {
         case SpvOpKill:
         case SpvOpReturn:
         case SpvOpUnreachable:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    static bool SpvIsIgnored(SpvOp opCode) {
+        switch (opCode) {
+        case SpvOpSource:
+        case SpvOpName:
+        case SpvOpMemberName:
             return true;
         default:
             return false;
@@ -387,6 +398,8 @@ namespace respv {
         instructionOrder.clear();
         results.clear();
         specializations.clear();
+        decorations.clear();
+        phis.clear();
         listNodes.clear();
     }
 
@@ -443,6 +456,13 @@ namespace respv {
                 results[resultId].instructionIndex = uint32_t(instructions.size());
             }
 
+            if ((opCode == SpvOpDecorate) || (opCode == SpvOpMemberDecorate)) {
+                decorations.emplace_back(uint32_t(instructions.size()));
+            }
+            else if (opCode == SpvOpPhi) {
+                phis.emplace_back(uint32_t(instructions.size()));
+            }
+
             instructions.emplace_back(wordIndex);
             wordIndex += wordCount;
         }
@@ -455,7 +475,7 @@ namespace respv {
             uint32_t wordIndex = instructions[i].wordIndex;
             SpvOp opCode = SpvOp(spirvWords[wordIndex] & 0xFFFFU);
             uint32_t wordCount = (spirvWords[wordIndex] >> 16U) & 0xFFFFU;
-            if (!SpvSupported(opCode)) {
+            if (!SpvIsSupported(opCode)) {
                 fprintf(stderr, "%s is not supported yet.\n", SpvOpToString(opCode));
                 return false;
             }
@@ -541,8 +561,15 @@ namespace respv {
                         return false;
                     }
 
+                    uint32_t resultInstructionIndex = results[resultId].instructionIndex;
+                    if (resultInstructionIndex == UINT32_MAX) {
+                        fprintf(stderr, "SPIR-V Parsing error. Invalid Operand ID: %u.\n", resultId);
+                        return false;
+                    }
+
                     specializations.resize(std::max(specializations.size(), size_t(constantId + 1)));
-                    specializations[constantId].resultId = resultId;
+                    specializations[constantId].constantInstructionIndex = resultInstructionIndex;
+                    specializations[constantId].decorationInstructionIndex = i;
                 }
             }
         }
@@ -721,7 +748,6 @@ namespace respv {
 
     struct OptimizerContext {
         const Shader &shader;
-        std::unordered_map<uint32_t, const SpecConstant *> &specConstants;
         std::vector<uint32_t> &instructionInDegrees;
         std::vector<uint32_t> &instructionOutDegrees;
         std::vector<Resolution> &resolutions;
@@ -730,7 +756,61 @@ namespace respv {
         OptimizerContext() = delete;
     };
 
-    static bool optimizerPrepareData(const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, OptimizerContext &c) {
+    static void optimizerEliminateInstruction(uint32_t instructionIndex, OptimizerContext &c) {
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
+        uint32_t wordIndex = c.shader.instructions[instructionIndex].wordIndex;
+        uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
+        for (uint32_t j = 0; j < wordCount; j++) {
+            optimizedWords[wordIndex + j] = UINT32_MAX;
+        }
+    }
+
+    static void optimizerReduceResultDegree(uint32_t firstResultId, OptimizerContext &c) {
+        thread_local std::vector<uint32_t> resultStack;
+        resultStack.emplace_back(firstResultId);
+
+        const uint32_t *optimizedWords = reinterpret_cast<const uint32_t *>(c.optimizedData.data());
+        while (!resultStack.empty()) {
+            uint32_t resultId = resultStack.back();
+            resultStack.pop_back();
+
+            uint32_t instructionIndex = c.shader.results[resultId].instructionIndex;
+            if (c.instructionOutDegrees[instructionIndex] == 0) {
+                continue;
+            }
+
+            c.instructionOutDegrees[instructionIndex]--;
+
+            // When nothing uses the result from this instruction anymore, we can delete it. Push any operands it uses into the stack as well to reduce their out degrees.
+            if (c.instructionOutDegrees[instructionIndex] == 0) {
+                uint32_t wordIndex = c.shader.instructions[instructionIndex].wordIndex;
+                SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
+                uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
+                uint32_t operandWordStart, operandWordCount, operandWordStride, operandWordSkip;
+                if (SpvHasOperands(opCode, operandWordStart, operandWordCount, operandWordStride, operandWordSkip)) {
+                    uint32_t operandWordIndex = operandWordStart;
+                    for (uint32_t j = 0; j < operandWordCount; j++) {
+                        if (j == operandWordSkip) {
+                            operandWordIndex++;
+                            continue;
+                        }
+
+                        if (operandWordIndex >= wordCount) {
+                            break;
+                        }
+
+                        uint32_t operandId = optimizedWords[wordIndex + operandWordIndex];
+                        resultStack.emplace_back(operandId);
+                        operandWordIndex += operandWordStride;
+                    }
+                }
+
+                optimizerEliminateInstruction(instructionIndex, c);
+            }
+        }
+    }
+
+    static bool optimizerPrepareData(OptimizerContext &c) {
         c.resolutions.clear();
         c.resolutions.resize(c.shader.results.size(), Resolution());
         c.instructionInDegrees.resize(c.shader.instructionInDegrees.size());
@@ -739,20 +819,51 @@ namespace respv {
         memcpy(c.instructionInDegrees.data(), c.shader.instructionInDegrees.data(), sizeof(uint32_t) * c.shader.instructionInDegrees.size());
         memcpy(c.instructionOutDegrees.data(), c.shader.instructionOutDegrees.data(), sizeof(uint32_t) * c.shader.instructionOutDegrees.size());
         memcpy(c.optimizedData.data(), c.shader.spirvWords, c.optimizedData.size());
+        return true;
+    }
 
-        // Store the specialization constants on a map so they're easier to access.
-        c.specConstants.clear();
+    static bool optimizerPatchSpecializationConstants(const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, OptimizerContext &c) {
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
         for (uint32_t i = 0; i < newSpecConstantCount; i++) {
-            if (newSpecConstants[i].specId >= c.shader.specializations.size()) {
+            const SpecConstant &newSpecConstant = newSpecConstants[i];
+            if (newSpecConstant.specId >= c.shader.specializations.size()) {
                 continue;
             }
 
-            const Specialization &specialization = c.shader.specializations[newSpecConstants[i].specId];
-            if (specialization.resultId == UINT32_MAX) {
+            const Specialization &specialization = c.shader.specializations[newSpecConstant.specId];
+            if (specialization.constantInstructionIndex == UINT32_MAX) {
                 continue;
             }
 
-            c.specConstants[specialization.resultId] = &newSpecConstants[i];
+            uint32_t constantWordIndex = c.shader.instructions[specialization.constantInstructionIndex].wordIndex;
+            SpvOp constantOpCode = SpvOp(optimizedWords[constantWordIndex] & 0xFFFFU);
+            uint32_t constantWordCount = (optimizedWords[constantWordIndex] >> 16U) & 0xFFFFU;
+            switch (constantOpCode) {
+            case SpvOpSpecConstantTrue:
+            case SpvOpSpecConstantFalse:
+                optimizedWords[constantWordIndex] = (newSpecConstant.values[0] ? SpvOpConstantTrue : SpvOpConstantFalse) | (constantWordCount << 16U);
+                break;
+            case SpvOpSpecConstant:
+                if (constantWordCount <= 3) {
+                    fprintf(stderr, "Optimization error. Specialization constant has less words than expected.\n");
+                    return false;
+                }
+
+                if (newSpecConstant.values.size() != (constantWordCount - 3)) {
+                    fprintf(stderr, "Optimization error. Value count for specialization constant %u differs from the expected size.\n", newSpecConstant.specId);
+                    return false;
+                }
+
+                optimizedWords[constantWordIndex] = SpvOpConstant | (constantWordCount << 16U);
+                memcpy(&optimizedWords[constantWordIndex + 3], newSpecConstant.values.data(), sizeof(uint32_t) * (constantWordCount - 3));
+                break;
+            default:
+                fprintf(stderr, "Optimization error. Can't patch opCode %u.\n", constantOpCode);
+                return false;
+            }
+
+            // Eliminate the decorator instruction as well.
+            optimizerEliminateInstruction(specialization.decorationInstructionIndex, c);
         }
 
         return true;
@@ -793,18 +904,6 @@ namespace respv {
         case SpvOpConstantFalse:
             resolution = Resolution::fromBool(false);
             break;
-        case SpvOpSpecConstant: {
-            auto it = c.specConstants.find(resultId);
-            if (it != c.specConstants.end()) {
-                assert(it->second->values.size() == 1 && "Only one specialization constant value is supported at the moment.");
-                resolution = Resolution::fromUint32(it->second->values[0]);
-            }
-            else {
-                resolution.type = Resolution::Type::Variable;
-            }
-
-            break;
-        }
         case SpvOpBitcast: {
             const Resolution &operandResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
             resolution = Resolution::fromUint32(operandResolution.value.u32);
@@ -995,15 +1094,6 @@ namespace respv {
         }
     }
 
-    static void eliminateInstruction(uint32_t instructionIndex, OptimizerContext &c) {
-        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
-        uint32_t wordIndex = c.shader.instructions[instructionIndex].wordIndex;
-        uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
-        for (uint32_t j = 0; j < wordCount; j++) {
-            optimizedWords[wordIndex + j] = UINT32_MAX;
-        }
-    }
-
     static void optimizerReduceLabelDegree(uint32_t firstLabelId, OptimizerContext &c) {
         thread_local std::vector<uint32_t> labelStack;
         labelStack.emplace_back(firstLabelId);
@@ -1045,7 +1135,7 @@ namespace respv {
                     }
 
                     foundTerminator = SpvOpIsTerminator(opCode);
-                    eliminateInstruction(i, c);
+                    optimizerEliminateInstruction(i, c);
                 }
             }
         }
@@ -1124,6 +1214,9 @@ namespace respv {
                 optimizedWords[i] = UINT32_MAX;
             }
         }
+
+        // Reduce the out degree of the result this terminator was using.
+        optimizerReduceResultDegree(operatorId, c);
     }
 
     static bool optimizerCompactPhi(uint32_t instructionIndex, OptimizerContext &c) {
@@ -1194,6 +1287,7 @@ namespace respv {
         }
 
         // Patch in the new word count.
+        assert((optimizedWords[wordIndex] != UINT32_MAX) && "The instruction shouldn't be getting deleted from reducing the degree of the operands.");
         optimizedWords[wordIndex] = SpvOpPhi | (newWordCount << 16U);
 
         // Delete any of the remaining words.
@@ -1282,6 +1376,45 @@ namespace respv {
         return true;
     }
 
+    static bool optimizerRemoveUnusedDecorations(OptimizerContext &c) {
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
+        for (Decoration decoration : c.shader.decorations) {
+            uint32_t wordIndex = c.shader.instructions[decoration.instructionIndex].wordIndex;
+            uint32_t resultId = optimizedWords[wordIndex + 1];
+            if (resultId == UINT32_MAX) {
+                // This decoration has already been deleted.
+                continue;
+            }
+
+            uint32_t resultInstructionIndex = c.shader.results[resultId].instructionIndex;
+            uint32_t resultWordIndex = c.shader.instructions[resultInstructionIndex].wordIndex;
+
+            // The result has been deleted, so we delete the decoration as well.
+            if (optimizedWords[resultWordIndex] == UINT32_MAX) {
+                optimizerEliminateInstruction(decoration.instructionIndex, c);
+            }
+        }
+
+        return true;
+    }
+
+    static bool optimizerCompactPhis(OptimizerContext &c) {
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
+        for (Phi phi : c.shader.phis) {
+            uint32_t wordIndex = c.shader.instructions[phi.instructionIndex].wordIndex;
+            if (optimizedWords[wordIndex] == UINT32_MAX) {
+                // This operation has already been deleted.
+                continue;
+            }
+
+            if (!optimizerCompactPhi(phi.instructionIndex, c)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     static bool optimizerCompactData(OptimizerContext &c) {
         uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
         uint32_t optimizedWordCount = 0;
@@ -1302,6 +1435,12 @@ namespace respv {
                 continue;
             }
 
+            // Check if the instruction should be ignored.
+            SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
+            if (SpvIsIgnored(opCode)) {
+                continue;
+            }
+
             // Copy all the words of the instruction.
             uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
             for (uint32_t j = 0; j < wordCount; j++) {
@@ -1315,16 +1454,31 @@ namespace respv {
     }
 
     bool Optimizer::run(const Shader &shader, const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData) {
-        thread_local std::unordered_map<uint32_t, const SpecConstant *> specConstants;
         thread_local std::vector<uint32_t> instructionInDegrees;
         thread_local std::vector<uint32_t> instructionOutDegrees;
         thread_local std::vector<Resolution> resolutions;
-        OptimizerContext c = { shader, specConstants, instructionInDegrees, instructionOutDegrees, resolutions, optimizedData };
-        if (!optimizerPrepareData(newSpecConstants, newSpecConstantCount, c)) {
+        OptimizerContext c = { shader, instructionInDegrees, instructionOutDegrees, resolutions, optimizedData };
+        if (!optimizerPrepareData(c)) {
+            return false;
+        }
+
+        if (!optimizerPatchSpecializationConstants(newSpecConstants, newSpecConstantCount, c)) {
             return false;
         }
 
         if (!optimizerRunEvaluationPass(c)) {
+            return false;
+        }
+
+        if (!optimizerRemoveUnusedDecorations(c)) {
+            return false;
+        }
+
+        // FIXME: For some reason, it seems that based on the order of the resolution, OpPhis can be compacted
+        // before all their preceding blocks have been evaluated in time whether they should be deleted or not.
+        // This pass merely re-runs the compaction step as a safeguard to remove any stale references. There's
+        // potential for further optimization if this is fixed properly.
+        if (!optimizerCompactPhis(c)) {
             return false;
         }
 

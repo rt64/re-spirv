@@ -44,14 +44,40 @@ namespace respv {
     };
 
     struct Specialization {
-        uint32_t resultId = UINT32_MAX;
+        uint32_t constantInstructionIndex = UINT32_MAX;
+        uint32_t decorationInstructionIndex = UINT32_MAX;
 
         Specialization() {
             // Empty.
         }
 
-        Specialization(uint32_t resultId) {
-            this->resultId = resultId;
+        Specialization(uint32_t constantInstructionIndex, uint32_t decorationInstructionIndex) {
+            this->constantInstructionIndex = constantInstructionIndex;
+            this->decorationInstructionIndex = decorationInstructionIndex;
+        }
+    };
+
+    struct Decoration {
+        uint32_t instructionIndex = UINT32_MAX;
+
+        Decoration() {
+            // Empty.
+        }
+
+        Decoration(uint32_t instructionIndex) {
+            this->instructionIndex = instructionIndex;
+        }
+    };
+
+    struct Phi {
+        uint32_t instructionIndex = UINT32_MAX;
+
+        Phi() {
+            // Empty.
+        }
+
+        Phi(uint32_t instructionIndex) {
+            this->instructionIndex = instructionIndex;
         }
     };
 
@@ -74,6 +100,8 @@ namespace respv {
         std::vector<uint32_t> instructionOrder;
         std::vector<Result> results;
         std::vector<Specialization> specializations;
+        std::vector<Decoration> decorations;
+        std::vector<Phi> phis;
         std::vector<ListNode> listNodes;
 
         Shader();
