@@ -8,71 +8,6 @@
 #include <vector>
 
 namespace respv {
-#if 0
-    struct Decorator {
-        uint32_t instructionIndex = UINT32_MAX;
-
-        Decorator() {
-            // Empty constructor.
-        }
-
-        Decorator(uint32_t instructionIndex) {
-            this->instructionIndex = instructionIndex;
-        }
-    };
-
-    struct Phi {
-        uint32_t instructionIndex = UINT32_MAX;
-
-        Phi() {
-            // Empty constructor.
-        }
-
-        Phi(uint32_t instructionIndex) {
-            this->instructionIndex = instructionIndex;
-        }
-    };
-
-    struct Block {
-        uint32_t wordIndex = 0;
-        uint32_t wordCount = 0;
-        uint32_t instructionIndex = 0;
-        uint32_t instructionCount = 0;
-        uint32_t adjacentListIndex = UINT32_MAX;
-
-        uint32_t mergeInstructionIndex() const {
-            return instructionIndex + instructionCount - 2;
-        }
-
-        uint32_t endInstructionIndex() const {
-            return instructionIndex + instructionCount - 1;
-        }
-    };
-
-    enum class IdType {
-        None,
-        Block,
-        Result,
-        Instruction
-    };
-
-    struct Shader {
-        std::vector<SpecConstant> specConstants;
-        std::vector<uint32_t> specConstantsTargetIds;
-        std::vector<uint32_t> specIdToConstantIndex;
-        std::vector<uint32_t> specIdToDecoratorIndex;
-        std::vector<Decorator> decorators;
-        std::vector<Block> blocks;
-        std::vector<uint32_t> blockDegrees;
-
-        bool isBlockLabeled(const Block &block) const;
-        bool processBlockAdjacentTo(Block &block, uint32_t labelId);
-        bool processBlocks();
-        bool processDecorators();
-        const Instruction resultToInstruction(uint32_t resultId) const;
-        uint32_t resultToWordIndex(uint32_t resultId) const;
-    };
-#endif
     struct SpecConstant {
         uint32_t specId = 0;
         std::vector<uint32_t> values;
@@ -108,6 +43,18 @@ namespace respv {
         }
     };
 
+    struct Specialization {
+        uint32_t resultId = UINT32_MAX;
+
+        Specialization() {
+            // Empty.
+        }
+
+        Specialization(uint32_t resultId) {
+            this->resultId = resultId;
+        }
+    };
+
     struct ListNode {
         uint32_t instructionIndex = UINT32_MAX;
         uint32_t nextListIndex = UINT32_MAX;
@@ -122,8 +69,11 @@ namespace respv {
         const uint32_t *spirvWords = nullptr;
         size_t spirvWordCount = 0;
         std::vector<Instruction> instructions;
-        std::vector<uint32_t> instructionDegrees;
+        std::vector<uint32_t> instructionInDegrees;
+        std::vector<uint32_t> instructionOutDegrees;
+        std::vector<uint32_t> instructionOrder;
         std::vector<Result> results;
+        std::vector<Specialization> specializations;
         std::vector<ListNode> listNodes;
 
         Shader();
@@ -133,6 +83,7 @@ namespace respv {
         bool parseWords(const void *data, size_t size);
         bool parse(const void *data, size_t size);
         bool buildAdjacencyLists();
+        bool sortInstructionGraph();
         bool empty() const;
     };
 

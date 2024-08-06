@@ -41,13 +41,13 @@ int main(int argc, char *argv[]) {
     
     auto endParsingTime = std::chrono::high_resolution_clock::now();
     std::vector<uint8_t> optimizedData;
-    std::vector<respv::SpecConstant> specConstants;
-    specConstants.resize(5);
-    specConstants[0].values[0] = 3356565624U;
-    specConstants[1].values[0] = 1584128U;
-    specConstants[2].values[0] = 4229999620U;
-    specConstants[3].values[0] = 4279211007U;
-    specConstants[4].values[0] = 747626510U;
+    std::vector<respv::SpecConstant> specConstants = {
+        respv::SpecConstant(0, { 3356565624U }),
+        respv::SpecConstant(1, { 1584128U }),
+        respv::SpecConstant(2, { 4229999620U }),
+        respv::SpecConstant(3, { 4279211007U }),
+        respv::SpecConstant(4, { 747626510U }),
+    };
 
     auto beginRunTime = std::chrono::high_resolution_clock::now();
     if (!respv::Optimizer::run(shader, specConstants.data(), specConstants.size(), optimizedData)) {
