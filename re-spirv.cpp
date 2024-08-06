@@ -47,6 +47,7 @@ namespace respv {
         case SpvOpConstantFalse:
         case SpvOpConstant:
         case SpvOpConstantComposite:
+        case SpvOpConstantNull:
         case SpvOpSpecConstant:
         case SpvOpFunction:
         case SpvOpFunctionEnd:
@@ -162,7 +163,7 @@ namespace respv {
         }
     }
 
-    static bool SpvHasOperands(SpvOp opCode, uint32_t &operandWordStart, uint32_t &operandWordCount, uint32_t &operandWordStride, uint32_t &operandWordSkip) {
+    static bool SpvHasOperands(SpvOp opCode, uint32_t &operandWordStart, uint32_t &operandWordCount, uint32_t &operandWordStride, uint32_t &operandWordSkip, bool &operandWordSkipString) {
         switch (opCode) {
         case SpvOpExecutionMode:
         case SpvOpDecorate:
@@ -173,12 +174,14 @@ namespace respv {
             operandWordCount = 1;
             operandWordStride = 1;
             operandWordSkip = UINT32_MAX;
+            operandWordSkipString = false;
             return true;
         case SpvOpStore:
             operandWordStart = 1;
             operandWordCount = 2;
             operandWordStride = 1;
             operandWordSkip = UINT32_MAX;
+            operandWordSkipString = false;
             return true;
         case SpvOpTypeVector:
         case SpvOpTypeImage:
@@ -188,12 +191,14 @@ namespace respv {
             operandWordCount = 1;
             operandWordStride = 1;
             operandWordSkip = UINT32_MAX;
+            operandWordSkipString = false;
             return true;
         case SpvOpTypeArray:
             operandWordStart = 2;
             operandWordCount = 2;
             operandWordStride = 1;
             operandWordSkip = UINT32_MAX;
+            operandWordSkipString = false;
             return true;
         case SpvOpTypeStruct:
         case SpvOpTypeFunction:
@@ -201,12 +206,14 @@ namespace respv {
             operandWordCount = UINT32_MAX;
             operandWordStride = 1;
             operandWordSkip = UINT32_MAX;
+            operandWordSkipString = false;
             return true;
         case SpvOpEntryPoint:
             operandWordStart = 2;
             operandWordCount = UINT32_MAX;
             operandWordStride = 1;
             operandWordSkip = 1;
+            operandWordSkipString = true;
             return true;
         case SpvOpTypePointer:
         case SpvOpLoad:
@@ -229,6 +236,7 @@ namespace respv {
             operandWordCount = 1;
             operandWordStride = 1;
             operandWordSkip = UINT32_MAX;
+            operandWordSkipString = false;
             return true;
         case SpvOpVectorShuffle:
         case SpvOpCompositeInsert:
@@ -295,12 +303,14 @@ namespace respv {
             operandWordCount = 2;
             operandWordStride = 1;
             operandWordSkip = UINT32_MAX;
+            operandWordSkipString = false;
             return true;
         case SpvOpSelect:
             operandWordStart = 3;
             operandWordCount = 3;
             operandWordStride = 1;
             operandWordSkip = UINT32_MAX;
+            operandWordSkipString = false;
             return true;
         case SpvOpConstantComposite:
         case SpvOpAccessChain:
@@ -309,12 +319,14 @@ namespace respv {
             operandWordCount = UINT32_MAX;
             operandWordStride = 1;
             operandWordSkip = UINT32_MAX;
+            operandWordSkipString = false;
             return true;
         case SpvOpExtInst:
             operandWordStart = 3;
             operandWordCount = UINT32_MAX;
             operandWordStride = 1;
             operandWordSkip = 1;
+            operandWordSkipString = false;
             return true;
         case SpvOpImageSampleExplicitLod:
         case SpvOpImageFetch:
@@ -322,12 +334,14 @@ namespace respv {
             operandWordCount = UINT32_MAX;
             operandWordStride = 1;
             operandWordSkip = 2;
+            operandWordSkipString = false;
             return true;
         case SpvOpPhi:
             operandWordStart = 3;
             operandWordCount = UINT32_MAX;
             operandWordStride = 2;
             operandWordSkip = UINT32_MAX;
+            operandWordSkipString = false;
             return true;
         case SpvOpFunction:
         case SpvOpVariable:
@@ -335,6 +349,7 @@ namespace respv {
             operandWordCount = 1;
             operandWordStride = 1;
             operandWordSkip = UINT32_MAX;
+            operandWordSkipString = false;
             return true;
         default:
             return false;
@@ -375,6 +390,24 @@ namespace respv {
         case SpvOpUnreachable:
             return true;
         default:
+            return false;
+        }
+    }
+
+    static bool checkOperandWordSkip(uint32_t wordIndex, const uint32_t *spirvWords, uint32_t relativeWordIndex, uint32_t operandWordSkip, bool operandWordSkipString, uint32_t &operandWordIndex) {
+        if (relativeWordIndex == operandWordSkip) {
+            if (operandWordSkipString) {
+                const char *operandString = reinterpret_cast<const char *>(&spirvWords[wordIndex + operandWordIndex]);
+                uint32_t stringLengthInWords = (strlen(operandString) + sizeof(uint32_t) - 1) / sizeof(uint32_t);
+                operandWordIndex += stringLengthInWords;
+            }
+            else {
+                operandWordIndex++;
+            }
+
+            return true;
+        }
+        else {
             return false;
         }
     }
@@ -501,11 +534,11 @@ namespace respv {
 
             // Every operand should be adjacent to this instruction.
             uint32_t operandWordStart, operandWordCount, operandWordStride, operandWordSkip;
-            if (SpvHasOperands(opCode, operandWordStart, operandWordCount, operandWordStride, operandWordSkip)) {
+            bool operandWordSkipString;
+            if (SpvHasOperands(opCode, operandWordStart, operandWordCount, operandWordStride, operandWordSkip, operandWordSkipString)) {
                 uint32_t operandWordIndex = operandWordStart;
                 for (uint32_t j = 0; j < operandWordCount; j++) {
-                    if (j == operandWordSkip) {
-                        operandWordIndex++;
+                    if (checkOperandWordSkip(wordIndex, spirvWords, j, operandWordSkip, operandWordSkipString, operandWordIndex)) {
                         continue;
                     }
 
@@ -787,11 +820,11 @@ namespace respv {
                 SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
                 uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
                 uint32_t operandWordStart, operandWordCount, operandWordStride, operandWordSkip;
-                if (SpvHasOperands(opCode, operandWordStart, operandWordCount, operandWordStride, operandWordSkip)) {
+                bool operandWordSkipString;
+                if (SpvHasOperands(opCode, operandWordStart, operandWordCount, operandWordStride, operandWordSkip, operandWordSkipString)) {
                     uint32_t operandWordIndex = operandWordStart;
                     for (uint32_t j = 0; j < operandWordCount; j++) {
-                        if (j == operandWordSkip) {
-                            operandWordIndex++;
+                        if (checkOperandWordSkip(wordIndex, optimizedWords, j, operandWordSkip, operandWordSkipString, operandWordIndex)) {
                             continue;
                         }
 
@@ -1334,11 +1367,11 @@ namespace respv {
                 // Check if any of the operands isn't a constant.
                 bool allOperandsAreConstant = true;
                 uint32_t operandWordStart, operandWordCount, operandWordStride, operandWordSkip;
-                if (SpvHasOperands(opCode, operandWordStart, operandWordCount, operandWordStride, operandWordSkip)) {
+                bool operandWordSkipString;
+                if (SpvHasOperands(opCode, operandWordStart, operandWordCount, operandWordStride, operandWordSkip, operandWordSkipString)) {
                     uint32_t operandWordIndex = operandWordStart;
                     for (uint32_t j = 0; j < operandWordCount; j++) {
-                        if (j == operandWordSkip) {
-                            operandWordIndex++;
+                        if (checkOperandWordSkip(wordIndex, optimizedWords, j, operandWordSkip, operandWordSkipString, operandWordIndex)) {
                             continue;
                         }
 
