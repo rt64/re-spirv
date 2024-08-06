@@ -110,8 +110,8 @@ namespace respv {
         uint32_t addToList(uint32_t instructionIndex, uint32_t listIndex);
         bool parseWords(const void *data, size_t size);
         bool parse(const void *data, size_t size);
-        bool buildAdjacencyLists();
-        bool sortInstructionGraph();
+        bool process();
+        bool sort();
         bool empty() const;
     };
 
