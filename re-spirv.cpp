@@ -808,7 +808,10 @@ namespace respv {
             resultStack.pop_back();
 
             uint32_t instructionIndex = c.shader.results[resultId].instructionIndex;
-            if (c.instructionOutDegrees[instructionIndex] == 0) {
+            uint32_t wordIndex = c.shader.instructions[instructionIndex].wordIndex;
+
+            // Instruction's been deleted.
+            if (optimizedWords[wordIndex] == UINT32_MAX) {
                 continue;
             }
 
@@ -816,7 +819,6 @@ namespace respv {
 
             // When nothing uses the result from this instruction anymore, we can delete it. Push any operands it uses into the stack as well to reduce their out degrees.
             if (c.instructionOutDegrees[instructionIndex] == 0) {
-                uint32_t wordIndex = c.shader.instructions[instructionIndex].wordIndex;
                 SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
                 uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
                 uint32_t operandWordStart, operandWordCount, operandWordStride, operandWordSkip;
@@ -1285,9 +1287,11 @@ namespace respv {
         for (uint32_t i = 3; i < wordCount; i += 2) {
             uint32_t labelId = optimizedWords[wordIndex + i + 1];
             uint32_t labelInstructionIndex = c.shader.results[labelId].instructionIndex;
+            uint32_t labelWordIndex = c.shader.instructions[labelInstructionIndex].wordIndex;
 
             // Label's been eliminated. Skip it.
-            if (c.instructionInDegrees[labelInstructionIndex] == 0) {
+            if (optimizedWords[labelWordIndex] == UINT32_MAX) {
+                optimizerReduceResultDegree(optimizedWords[wordIndex + i], c);
                 continue;
             }
 
@@ -1315,6 +1319,7 @@ namespace respv {
 
             // The preceding block did not have any reference to this block. Skip it.
             if (!foundBranchToThisBlock) {
+                optimizerReduceResultDegree(optimizedWords[wordIndex + i], c);
                 continue;
             }
 
