@@ -540,7 +540,7 @@ namespace respv {
                     }
                 }
             }
-
+            
             // Every operand should be adjacent to this instruction.
             uint32_t operandWordStart, operandWordCount, operandWordStride, operandWordSkip;
             bool operandWordSkipString;
@@ -583,7 +583,7 @@ namespace respv {
                     }
 
                     if (results[labelId].instructionIndex == UINT32_MAX) {
-                        fprintf(stderr, "SPIR-V Parsing error. Result %u is not valid.\n", labelId);
+                        fprintf(stderr, "SPIR-V Parsing error. Invalid Operand ID: %u.\n", labelId);
                         return false;
                     }
 
@@ -592,8 +592,26 @@ namespace respv {
                 }
             }
 
+            // Parse parented blocks of OpPhi to indicate the dependency.
+            if (opCode == SpvOpPhi) {
+                for (uint32_t j = 3; j < wordCount; j += 2) {
+                    uint32_t labelId = spirvWords[wordIndex + j + 1];
+                    if (labelId >= results.size()) {
+                        fprintf(stderr, "SPIR-V Parsing error. Invalid Parent ID: %u.\n", labelId);
+                        return false;
+                    }
+
+                    if (results[labelId].instructionIndex == UINT32_MAX) {
+                        fprintf(stderr, "SPIR-V Parsing error. Invalid Parent ID: %u.\n", labelId);
+                        return false;
+                    }
+
+                    uint32_t labelIndex = results[labelId].instructionIndex;
+                    instructions[labelIndex].adjacentListIndex = addToList(i, instructions[labelIndex].adjacentListIndex);
+                }
+            }
             // Parse decorations.
-            if (opCode == SpvOpDecorate) {
+            else if (opCode == SpvOpDecorate) {
                 uint32_t decoration = spirvWords[wordIndex + 2];
                 if (decoration == SpvDecorationSpecId) {
                     uint32_t resultId = spirvWords[wordIndex + 1];
