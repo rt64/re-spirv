@@ -1,5 +1,5 @@
 # re-spirv
-re-spirv is a SPIR-V optimizer designed to be as lightweight and fast as possible. It's primarily designed for eliminating dead code after patching spec constants into actual constants, which is also functionality that re-spirv provides.
+re-spirv is a SPIR-V optimizer designed to be as lightweight and fast as possible. It's primarily designed for eliminating dead code after patching spec constants into actual constants, which is also functionality that re-spirv provides. It was originally built for use in [RT64](https://github.com/rt64/rt64), with our intention being that it can become more general-purpose over time.
 
 The primary use case for re-spirv is ubershaders. Applications that use ubershaders need to quickly generate specialized shaders for each combination of spec constants to improve performance. While GPU drivers are also able to perform these optimizations when using shaders with spec constants, re-spirv operates much more quickly (over 100x in some cases) which drastically speeds up pipeline creation.
 
@@ -12,7 +12,7 @@ The analysis step parses the SPIR-V input and builds several data structures fro
 #### Optimization
 The optimization step uses the data structures built during analysis to perform constant propagation, dead code elimination, and dead branch elimination, all in a single incredibly quick pass.
 
-It does this by traversing the sorted DAG produced during analysis, during which is checks if each instruction has all constant operands. If an instruction does then re-spirv records the instruction as having a constant result, which can be referenced while processing another instruction that references this result.
+It does this by traversing the sorted DAG that was produced during analysis. During traversal, re-spirv checks if each instruction has only constant operands. For any instructions that do, re-spirv calculates the result using the instruction's formula and stores the result. The result is then marked as constant for future instructions that reference it.
 
 When re-spirv encounters a conditional branch or switch instruction which has a constant-evaluable input, the branch is compacted based on the result of that constant evaluation. Conditional branches are converted into unconditional branches, while switches are reduced to having a single case (to meet the SPIR-V structured control flow requirements), and the indegrees of the labels for the blocks that are no longer referenced by the branch are reduced accordingly.
 
@@ -22,7 +22,7 @@ If a label's indegree reaches zero after processing a branch instruction, the la
 There are two other main solutions to the problem that re-spirv solves: using spirv-opt to perform the spec constant patching and optimization, or simply allowing the driver to do the optimizations itself.
 
 #### spirv-opt
-spirv-opt is a general-purpose SPIR-V optimizer included in SPIRV-Tools. It offers many more types of optimizations than what re-spirv has, but in comparison is much slower and a much larger footprint. For comparison, using spirv-opt adds at least 400 source files to a project, while re-spirv is a single source file with fewer than 2000 lines of C++ and a header.
+spirv-opt is a general-purpose SPIR-V optimizer included in [SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools). It offers many more types of optimizations than what re-spirv has, but in comparison is much slower and a much larger footprint. For comparison, using spirv-opt adds at least 400 source files to a project, while re-spirv is a single source file with fewer than 2000 lines of C++ and a header.
 
 For the 940kB ubershader used by RT64 and a specific set of spec constants to specialize it with, re-spirv produces a 15252 byte SPIR-V binary in 4 milliseconds, 3 of which are the reusable analysis step. Running spirv-opt with the same inputs produces an 11920 byte SPIR-V binary, but takes approximately 600 milliseconds to do so on the same machine. This represents a 600x speed uplift for re-spirv if the analysis is done ahead of time, with a resulting shader that's only 28% larger.
 
@@ -42,3 +42,5 @@ One feature that would allow re-spirv to optimize shaders even further is block 
 Another area where re-spirv could gain some ground is in its constant propagation behavior. Currently, the constant propagation algorithm is only able to remove instructions if the propagation results in a branch being compacted. If re-spirv were able to emit new constants into the SPIR-V binary and replace references to instruction results with those constants, it would allow constant propagation to have an effect in cases that aren't branches, such as propagating into the operands of arithmetic or load/store instructions.
 
 Lastly, re-spirv is currently only able to handle 32-bit integer operations during constant propagation, as it was designed for optimizing out branches based on a set of flags. Adding support for other types would allow it to optimize shaders for more use cases.
+
+If you're interested in helping with re-spirv's development, take a look at the [issues page](https://github.com/rt64/re-spirv/issues) to see areas where it can be improved.
