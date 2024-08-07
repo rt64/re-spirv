@@ -528,8 +528,17 @@ namespace respv {
                     return false;
                 }
 
-                uint32_t resultIndex = results[typeId].instructionIndex;
-                instructions[resultIndex].adjacentListIndex = addToList(i, instructions[resultIndex].adjacentListIndex);
+                uint32_t typeInstructionIndex = results[typeId].instructionIndex;
+                instructions[typeInstructionIndex].adjacentListIndex = addToList(i, instructions[typeInstructionIndex].adjacentListIndex);
+
+                // Check if it's an OpConstant of Int type so it can be reused on switches.
+                if ((opCode == SpvOpConstant) && (defaultSwitchOpConstantInt == UINT32_MAX)) {
+                    uint32_t typeWordIndex = instructions[typeInstructionIndex].wordIndex;
+                    SpvOp typeOpCode = SpvOp(spirvWords[typeWordIndex] & 0xFFFFU);
+                    if (typeOpCode == SpvOpTypeInt) {
+                        defaultSwitchOpConstantInt = spirvWords[wordIndex + 2];
+                    }
+                }
             }
 
             // Every operand should be adjacent to this instruction.
@@ -605,6 +614,11 @@ namespace respv {
                     specializations[constantId].decorationInstructionIndex = i;
                 }
             }
+        }
+
+        if (defaultSwitchOpConstantInt == UINT32_MAX) {
+            fprintf(stderr, "Unable to find an OpConstantInt to use as replacement for switches. Adding this instruction automatically is not supported yet.\n");
+            return false;
         }
 
         return true;
@@ -798,10 +812,7 @@ namespace respv {
         }
     }
 
-    static void optimizerReduceResultDegree(uint32_t firstResultId, OptimizerContext &c) {
-        thread_local std::vector<uint32_t> resultStack;
-        resultStack.emplace_back(firstResultId);
-
+    static void optimizerReduceResultDegrees(OptimizerContext &c, std::vector<uint32_t> &resultStack) {
         const uint32_t *optimizedWords = reinterpret_cast<const uint32_t *>(c.optimizedData.data());
         while (!resultStack.empty()) {
             uint32_t resultId = resultStack.back();
@@ -1131,7 +1142,11 @@ namespace respv {
 
     static void optimizerReduceLabelDegree(uint32_t firstLabelId, OptimizerContext &c) {
         thread_local std::vector<uint32_t> labelStack;
+        thread_local std::vector<uint32_t> resultStack;
+        thread_local std::vector<uint32_t> degreeReductions;
         labelStack.emplace_back(firstLabelId);
+        resultStack.clear();
+        degreeReductions.clear();
 
         uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
         while (!labelStack.empty()) {
@@ -1169,11 +1184,33 @@ namespace respv {
                         }
                     }
 
+                    // If the instruction has operands, decrease their degree.
+                    uint32_t operandWordStart, operandWordCount, operandWordStride, operandWordSkip;
+                    bool operandWordSkipString;
+                    if (SpvHasOperands(opCode, operandWordStart, operandWordCount, operandWordStride, operandWordSkip, operandWordSkipString)) {
+                        uint32_t operandWordIndex = operandWordStart;
+                        for (uint32_t j = 0; j < operandWordCount; j++) {
+                            if (checkOperandWordSkip(wordIndex, optimizedWords, j, operandWordSkip, operandWordSkipString, operandWordIndex)) {
+                                continue;
+                            }
+
+                            if (operandWordIndex >= wordCount) {
+                                break;
+                            }
+
+                            uint32_t operandId = optimizedWords[wordIndex + operandWordIndex];
+                            resultStack.emplace_back(operandId);
+                            operandWordIndex += operandWordStride;
+                        }
+                    }
+
                     foundTerminator = SpvOpIsTerminator(opCode);
                     optimizerEliminateInstruction(i, c);
                 }
             }
         }
+
+        optimizerReduceResultDegrees(c, resultStack);
     }
 
     static void optimizerEvaluateTerminator(uint32_t instructionIndex, OptimizerContext &c) {
@@ -1250,13 +1287,24 @@ namespace respv {
 
             // Make the final label the new default case and reduce the word count.
             optimizedWords[wordIndex] = SpvOpSwitch | (3U << 16U);
+            optimizedWords[wordIndex + 1] = c.shader.defaultSwitchOpConstantInt;
             optimizedWords[wordIndex + 2] = defaultLabelId;
+
+            // Increase the degree of the default constant that was chosen so it's not considered as dead code.
+            uint32_t defaultConstantInstructionIndex = c.shader.results[c.shader.defaultSwitchOpConstantInt].instructionIndex;
+            c.instructionOutDegrees[defaultConstantInstructionIndex]++;
 
             // Eliminate any remaining words on the block.
             for (uint32_t i = wordIndex + 3; i < (wordIndex + wordCount); i++) {
                 optimizedWords[i] = UINT32_MAX;
             }
         }
+
+        // The condition operator can be discarded.
+        thread_local std::vector<uint32_t> resultStack;
+        resultStack.clear();
+        resultStack.emplace_back(operatorId);
+        optimizerReduceResultDegrees(c, resultStack);
     }
 
     static bool optimizerCompactPhi(uint32_t instructionIndex, OptimizerContext &c) {
@@ -1280,6 +1328,9 @@ namespace respv {
             return false;
         }
 
+        thread_local std::vector<uint32_t> resultStack;
+        resultStack.clear();
+
         uint32_t wordIndex = c.shader.instructions[instructionIndex].wordIndex;
         uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
         uint32_t newWordCount = 3;
@@ -1291,7 +1342,7 @@ namespace respv {
 
             // Label's been eliminated. Skip it.
             if (optimizedWords[labelWordIndex] == UINT32_MAX) {
-                optimizerReduceResultDegree(optimizedWords[wordIndex + i], c);
+                resultStack.emplace_back(optimizedWords[wordIndex + i]);
                 continue;
             }
 
@@ -1319,7 +1370,7 @@ namespace respv {
 
             // The preceding block did not have any reference to this block. Skip it.
             if (!foundBranchToThisBlock) {
-                optimizerReduceResultDegree(optimizedWords[wordIndex + i], c);
+                resultStack.emplace_back(optimizedWords[wordIndex + i]);
                 continue;
             }
 
@@ -1337,6 +1388,8 @@ namespace respv {
         for (uint32_t i = newWordCount; i < wordCount; i++) {
             optimizedWords[wordIndex + i] = UINT32_MAX;
         }
+
+        optimizerReduceResultDegrees(c, resultStack);
 
         return true;
     }
