@@ -7,7 +7,6 @@ if (NOT DEFINED SPIRV-Headers_SOURCE_DIR)
 endif()
 
 add_library(re-spirv STATIC "re-spirv.cpp")
-target_compile_options(re-spirv PRIVATE -fPIC)
 set(SPIRV_HEADER_DIR ${SPIRV-Headers_SOURCE_DIR})
 target_include_directories(re-spirv PUBLIC ${SPIRV_HEADER_DIR}/include)
 
