@@ -101,7 +101,6 @@ namespace respv {
         std::vector<Result> results;
         std::vector<Specialization> specializations;
         std::vector<Decoration> decorations;
-        std::vector<Phi> phis;
         std::vector<ListNode> listNodes;
         uint32_t defaultSwitchOpConstantInt = UINT32_MAX;
 

@@ -432,7 +432,6 @@ namespace respv {
         results.clear();
         specializations.clear();
         decorations.clear();
-        phis.clear();
         listNodes.clear();
     }
 
@@ -491,9 +490,6 @@ namespace respv {
 
             if ((opCode == SpvOpDecorate) || (opCode == SpvOpMemberDecorate)) {
                 decorations.emplace_back(uint32_t(instructions.size()));
-            }
-            else if (opCode == SpvOpPhi) {
-                phis.emplace_back(uint32_t(instructions.size()));
             }
 
             instructions.emplace_back(wordIndex);
@@ -856,16 +852,18 @@ namespace respv {
         }
     }
 
-    static bool optimizerPrepareData(OptimizerContext &c) {
+    static void optimizerPrepareData(OptimizerContext &c) {
+        c.optimizedData.resize(c.shader.spirvWordCount * sizeof(uint32_t));
+        memcpy(c.optimizedData.data(), c.shader.spirvWords, c.optimizedData.size());
+    }
+
+    static void optimizerResetEvaluations(OptimizerContext &c) {
         c.resolutions.clear();
         c.resolutions.resize(c.shader.results.size(), Resolution());
         c.instructionInDegrees.resize(c.shader.instructionInDegrees.size());
         c.instructionOutDegrees.resize(c.shader.instructionOutDegrees.size());
-        c.optimizedData.resize(c.shader.spirvWordCount * sizeof(uint32_t));
         memcpy(c.instructionInDegrees.data(), c.shader.instructionInDegrees.data(), sizeof(uint32_t) * c.shader.instructionInDegrees.size());
         memcpy(c.instructionOutDegrees.data(), c.shader.instructionOutDegrees.data(), sizeof(uint32_t) * c.shader.instructionOutDegrees.size());
-        memcpy(c.optimizedData.data(), c.shader.spirvWords, c.optimizedData.size());
-        return true;
     }
 
     static bool optimizerPatchSpecializationConstants(const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, OptimizerContext &c) {
@@ -1494,23 +1492,6 @@ namespace respv {
         return true;
     }
 
-    static bool optimizerCompactPhis(OptimizerContext &c) {
-        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
-        for (Phi phi : c.shader.phis) {
-            uint32_t wordIndex = c.shader.instructions[phi.instructionIndex].wordIndex;
-            if (optimizedWords[wordIndex] == UINT32_MAX) {
-                // This operation has already been deleted.
-                continue;
-            }
-
-            if (!optimizerCompactPhi(phi.instructionIndex, c)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     static bool optimizerCompactData(OptimizerContext &c) {
         uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
         uint32_t optimizedWordCount = 0;
@@ -1554,10 +1535,9 @@ namespace respv {
         thread_local std::vector<uint32_t> instructionOutDegrees;
         thread_local std::vector<Resolution> resolutions;
         OptimizerContext c = { shader, instructionInDegrees, instructionOutDegrees, resolutions, optimizedData };
-        if (!optimizerPrepareData(c)) {
-            return false;
-        }
-
+        optimizerPrepareData(c);
+        optimizerResetEvaluations(c);
+        
         if (!optimizerPatchSpecializationConstants(newSpecConstants, newSpecConstantCount, c)) {
             return false;
         }
@@ -1567,14 +1547,6 @@ namespace respv {
         }
 
         if (!optimizerRemoveUnusedDecorations(c)) {
-            return false;
-        }
-
-        // FIXME: For some reason, it seems that based on the order of the resolution, OpPhis can be compacted
-        // before all their preceding blocks have been evaluated in time whether they should be deleted or not.
-        // This pass merely re-runs the compaction step as a safeguard to remove any stale references. There's
-        // potential for further optimization if this is fixed properly.
-        if (!optimizerCompactPhis(c)) {
             return false;
         }
 
