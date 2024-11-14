@@ -1,6 +1,9 @@
 //
 // re-spirv
 //
+// Copyright (c) 2024 renderbag and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file for details.
+//
 
 #include "re-spirv.h"
 

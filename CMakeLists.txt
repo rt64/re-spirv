@@ -1,3 +1,10 @@
+#
+# re-spirv
+#
+# Copyright (c) 2024 renderbag and contributors. All rights reserved.
+# Licensed under the MIT license. See LICENSE file for details.
+#
+
 cmake_minimum_required(VERSION 3.20)
 project(re-spirv)
 set(CMAKE_CXX_STANDARD 17)
