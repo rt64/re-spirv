@@ -20,8 +20,8 @@
 namespace respv {
     // Common.
     
-    static bool SpvIsSupported(SpvOp opCode) {
-        switch (opCode) {
+    static bool SpvIsSupported(SpvOp pOpCode) {
+        switch (pOpCode) {
         case SpvOpUndef:
         case SpvOpSource:
         case SpvOpName:
@@ -181,8 +181,8 @@ namespace respv {
         }
     }
 
-    static bool SpvIsIgnored(SpvOp opCode) {
-        switch (opCode) {
+    static bool SpvIsIgnored(SpvOp pOpCode) {
+        switch (pOpCode) {
         case SpvOpSource:
         case SpvOpName:
         case SpvOpMemberName:
@@ -192,58 +192,58 @@ namespace respv {
         }
     }
 
-    static bool SpvHasOperands(SpvOp opCode, uint32_t &operandWordStart, uint32_t &operandWordCount, uint32_t &operandWordStride, uint32_t &operandWordSkip, bool &operandWordSkipString) {
-        switch (opCode) {
+    static bool SpvHasOperands(SpvOp pOpCode, uint32_t &rOperandWordStart, uint32_t &rOperandWordCount, uint32_t &rOperandWordStride, uint32_t &rOperandWordSkip, bool &rOperandWordSkipString) {
+        switch (pOpCode) {
         case SpvOpExecutionMode:
         case SpvOpDecorate:
         case SpvOpMemberDecorate:
         case SpvOpBranchConditional:
         case SpvOpSwitch:
         case SpvOpReturnValue:
-            operandWordStart = 1;
-            operandWordCount = 1;
-            operandWordStride = 1;
-            operandWordSkip = UINT32_MAX;
-            operandWordSkipString = false;
+            rOperandWordStart = 1;
+            rOperandWordCount = 1;
+            rOperandWordStride = 1;
+            rOperandWordSkip = UINT32_MAX;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpStore:
-            operandWordStart = 1;
-            operandWordCount = 2;
-            operandWordStride = 1;
-            operandWordSkip = UINT32_MAX;
-            operandWordSkipString = false;
+            rOperandWordStart = 1;
+            rOperandWordCount = 2;
+            rOperandWordStride = 1;
+            rOperandWordSkip = UINT32_MAX;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpTypeVector:
         case SpvOpTypeImage:
         case SpvOpTypeSampledImage:
         case SpvOpTypeRuntimeArray:
-            operandWordStart = 2;
-            operandWordCount = 1;
-            operandWordStride = 1;
-            operandWordSkip = UINT32_MAX;
-            operandWordSkipString = false;
+            rOperandWordStart = 2;
+            rOperandWordCount = 1;
+            rOperandWordStride = 1;
+            rOperandWordSkip = UINT32_MAX;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpTypeArray:
-            operandWordStart = 2;
-            operandWordCount = 2;
-            operandWordStride = 1;
-            operandWordSkip = UINT32_MAX;
-            operandWordSkipString = false;
+            rOperandWordStart = 2;
+            rOperandWordCount = 2;
+            rOperandWordStride = 1;
+            rOperandWordSkip = UINT32_MAX;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpTypeStruct:
         case SpvOpTypeFunction:
-            operandWordStart = 2;
-            operandWordCount = UINT32_MAX;
-            operandWordStride = 1;
-            operandWordSkip = UINT32_MAX;
-            operandWordSkipString = false;
+            rOperandWordStart = 2;
+            rOperandWordCount = UINT32_MAX;
+            rOperandWordStride = 1;
+            rOperandWordSkip = UINT32_MAX;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpEntryPoint:
-            operandWordStart = 2;
-            operandWordCount = UINT32_MAX;
-            operandWordStride = 1;
-            operandWordSkip = 1;
-            operandWordSkipString = true;
+            rOperandWordStart = 2;
+            rOperandWordCount = UINT32_MAX;
+            rOperandWordStride = 1;
+            rOperandWordSkip = 1;
+            rOperandWordSkipString = true;
             return true;
         case SpvOpTypePointer:
         case SpvOpLoad:
@@ -269,11 +269,11 @@ namespace respv {
         case SpvOpDPdy:
         case SpvOpFwidth:
         case SpvOpCopyLogical:
-            operandWordStart = 3;
-            operandWordCount = 1;
-            operandWordStride = 1;
-            operandWordSkip = UINT32_MAX;
-            operandWordSkipString = false;
+            rOperandWordStart = 3;
+            rOperandWordCount = 1;
+            rOperandWordStride = 1;
+            rOperandWordSkip = UINT32_MAX;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpVectorShuffle:
         case SpvOpCompositeInsert:
@@ -336,51 +336,51 @@ namespace respv {
         case SpvOpBitwiseOr:
         case SpvOpBitwiseAnd:
         case SpvOpBitwiseXor:
-            operandWordStart = 3;
-            operandWordCount = 2;
-            operandWordStride = 1;
-            operandWordSkip = UINT32_MAX;
-            operandWordSkipString = false;
+            rOperandWordStart = 3;
+            rOperandWordCount = 2;
+            rOperandWordStride = 1;
+            rOperandWordSkip = UINT32_MAX;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpSelect:
         case SpvOpBitFieldSExtract:
         case SpvOpBitFieldUExtract:
-            operandWordStart = 3;
-            operandWordCount = 3;
-            operandWordStride = 1;
-            operandWordSkip = UINT32_MAX;
-            operandWordSkipString = false;
+            rOperandWordStart = 3;
+            rOperandWordCount = 3;
+            rOperandWordStride = 1;
+            rOperandWordSkip = UINT32_MAX;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpBitFieldInsert:
-            operandWordStart = 3;
-            operandWordCount = 4;
-            operandWordStride = 1;
-            operandWordSkip = UINT32_MAX;
-            operandWordSkipString = false;
+            rOperandWordStart = 3;
+            rOperandWordCount = 4;
+            rOperandWordStride = 1;
+            rOperandWordSkip = UINT32_MAX;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpConstantComposite:
         case SpvOpFunctionCall:
         case SpvOpAccessChain:
         case SpvOpCompositeConstruct:
-            operandWordStart = 3;
-            operandWordCount = UINT32_MAX;
-            operandWordStride = 1;
-            operandWordSkip = UINT32_MAX;
-            operandWordSkipString = false;
+            rOperandWordStart = 3;
+            rOperandWordCount = UINT32_MAX;
+            rOperandWordStride = 1;
+            rOperandWordSkip = UINT32_MAX;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpExtInst:
-            operandWordStart = 3;
-            operandWordCount = UINT32_MAX;
-            operandWordStride = 1;
-            operandWordSkip = 1;
-            operandWordSkipString = false;
+            rOperandWordStart = 3;
+            rOperandWordCount = UINT32_MAX;
+            rOperandWordStride = 1;
+            rOperandWordSkip = 1;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpImageWrite:
-            operandWordStart = 1;
-            operandWordCount = UINT32_MAX;
-            operandWordStride = 1;
-            operandWordSkip = 3;
-            operandWordSkipString = false;
+            rOperandWordStart = 1;
+            rOperandWordCount = UINT32_MAX;
+            rOperandWordStride = 1;
+            rOperandWordSkip = 3;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpImageSampleImplicitLod:
         case SpvOpImageSampleExplicitLod:
@@ -388,11 +388,11 @@ namespace respv {
         case SpvOpImageSampleProjExplicitLod:
         case SpvOpImageFetch:
         case SpvOpImageRead:
-            operandWordStart = 3;
-            operandWordCount = UINT32_MAX;
-            operandWordStride = 1;
-            operandWordSkip = 2;
-            operandWordSkipString = false;
+            rOperandWordStart = 3;
+            rOperandWordCount = UINT32_MAX;
+            rOperandWordStride = 1;
+            rOperandWordSkip = 2;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpImageSampleDrefImplicitLod:
         case SpvOpImageSampleDrefExplicitLod:
@@ -400,62 +400,62 @@ namespace respv {
         case SpvOpImageSampleProjDrefExplicitLod:
         case SpvOpImageGather:
         case SpvOpImageDrefGather:
-            operandWordStart = 3;
-            operandWordCount = UINT32_MAX;
-            operandWordStride = 1;
-            operandWordSkip = 3;
-            operandWordSkipString = false;
+            rOperandWordStart = 3;
+            rOperandWordCount = UINT32_MAX;
+            rOperandWordStride = 1;
+            rOperandWordSkip = 3;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpPhi:
-            operandWordStart = 3;
-            operandWordCount = UINT32_MAX;
-            operandWordStride = 2;
-            operandWordSkip = UINT32_MAX;
-            operandWordSkipString = false;
+            rOperandWordStart = 3;
+            rOperandWordCount = UINT32_MAX;
+            rOperandWordStride = 2;
+            rOperandWordSkip = UINT32_MAX;
+            rOperandWordSkipString = false;
             return true;
         case SpvOpFunction:
         case SpvOpVariable:
-            operandWordStart = 4;
-            operandWordCount = 1;
-            operandWordStride = 1;
-            operandWordSkip = UINT32_MAX;
-            operandWordSkipString = false;
+            rOperandWordStart = 4;
+            rOperandWordCount = 1;
+            rOperandWordStride = 1;
+            rOperandWordSkip = UINT32_MAX;
+            rOperandWordSkipString = false;
             return true;
         default:
             return false;
         }
     }
 
-    static bool SpvHasLabels(SpvOp opCode, uint32_t &labelWordStart, uint32_t &labelWordCount, uint32_t &labelWordStride) {
-        switch (opCode) {
+    static bool SpvHasLabels(SpvOp pOpCode, uint32_t &rLabelWordStart, uint32_t &rLabelWordCount, uint32_t &rLabelWordStride) {
+        switch (pOpCode) {
         case SpvOpSelectionMerge:
         case SpvOpBranch:
-            labelWordStart = 1;
-            labelWordCount = 1;
-            labelWordStride = 1;
+            rLabelWordStart = 1;
+            rLabelWordCount = 1;
+            rLabelWordStride = 1;
             return true;
         case SpvOpLoopMerge:
-            labelWordStart = 1;
-            labelWordCount = 2;
-            labelWordStride = 1;
+            rLabelWordStart = 1;
+            rLabelWordCount = 2;
+            rLabelWordStride = 1;
             return true;
         case SpvOpBranchConditional:
-            labelWordStart = 2;
-            labelWordCount = 2;
-            labelWordStride = 1;
+            rLabelWordStart = 2;
+            rLabelWordCount = 2;
+            rLabelWordStride = 1;
             return true;
         case SpvOpSwitch:
-            labelWordStart = 2;
-            labelWordCount = UINT32_MAX;
-            labelWordStride = 2;
+            rLabelWordStart = 2;
+            rLabelWordCount = UINT32_MAX;
+            rLabelWordStride = 2;
             return true;
         default:
             return false;
         }
     }
 
-    static bool SpvOpIsTerminator(SpvOp opCode) {
-        switch (opCode) {
+    static bool SpvOpIsTerminator(SpvOp pOpCode) {
+        switch (pOpCode) {
         case SpvOpBranch:
         case SpvOpBranchConditional:
         case SpvOpSwitch:
@@ -469,15 +469,15 @@ namespace respv {
         }
     }
 
-    static bool checkOperandWordSkip(uint32_t wordIndex, const uint32_t *spirvWords, uint32_t relativeWordIndex, uint32_t operandWordSkip, bool operandWordSkipString, uint32_t &operandWordIndex) {
-        if (relativeWordIndex == operandWordSkip) {
-            if (operandWordSkipString) {
-                const char *operandString = reinterpret_cast<const char *>(&spirvWords[wordIndex + operandWordIndex]);
+    static bool checkOperandWordSkip(uint32_t pWordIndex, const uint32_t *pSpirvWords, uint32_t pRelativeWordIndex, uint32_t pOperandWordSkip, bool pOperandWordSkipString, uint32_t &rOperandWordIndex) {
+        if (pRelativeWordIndex == pOperandWordSkip) {
+            if (pOperandWordSkipString) {
+                const char *operandString = reinterpret_cast<const char *>(&pSpirvWords[pWordIndex + rOperandWordIndex]);
                 uint32_t stringLengthInWords = (strlen(operandString) + sizeof(uint32_t)) / sizeof(uint32_t);
-                operandWordIndex += stringLengthInWords;
+                rOperandWordIndex += stringLengthInWords;
             }
             else {
-                operandWordIndex++;
+                rOperandWordIndex++;
             }
 
             return true;
@@ -493,8 +493,8 @@ namespace respv {
         // Empty.
     }
 
-    Shader::Shader(const void *data, size_t size) {
-        parse(data, size);
+    Shader::Shader(const void *pData, size_t pSize) {
+        parse(pData, pSize);
     }
 
     void Shader::clear() {
@@ -511,17 +511,17 @@ namespace respv {
         listNodes.clear();
     }
 
-    uint32_t Shader::addToList(uint32_t instructionIndex, uint32_t listIndex) {
-        listNodes.emplace_back(instructionIndex, listIndex);
+    uint32_t Shader::addToList(uint32_t pInstructionIndex, uint32_t pListIndex) {
+        listNodes.emplace_back(pInstructionIndex, pListIndex);
         return uint32_t(listNodes.size() - 1);
     }
 
-    bool Shader::parseWords(const void *data, size_t size) {
-        assert(data != nullptr);
-        assert(size > 0);
+    bool Shader::parseWords(const void *pData, size_t pSize) {
+        assert(pData != nullptr);
+        assert(pSize > 0);
 
-        spirvWords = reinterpret_cast<const uint32_t *>(data);
-        spirvWordCount = size / sizeof(uint32_t);
+        spirvWords = reinterpret_cast<const uint32_t *>(pData);
+        spirvWordCount = pSize / sizeof(uint32_t);
 
         const uint32_t startingWordIndex = 5;
         if (spirvWordCount < startingWordIndex) {
@@ -826,13 +826,13 @@ namespace respv {
         return true;
     }
 
-    bool Shader::parse(const void *data, size_t size) {
-        assert(data != nullptr);
-        assert((size % sizeof(uint32_t) == 0) && "Size of data must be aligned to the word size.");
+    bool Shader::parse(const void *pData, size_t pSize) {
+        assert(pData != nullptr);
+        assert((pSize % sizeof(uint32_t) == 0) && "Size of data must be aligned to the word size.");
 
         clear();
 
-        if (!parseWords(data, size)) {
+        if (!parseWords(pData, pSize)) {
             return false;
         }
 
@@ -869,24 +869,24 @@ namespace respv {
             };
         } value = {};
 
-        static Resolution fromBool(bool value) {
+        static Resolution fromBool(bool pValue) {
             Resolution r;
             r.type = Type::Constant;
-            r.value.u32 = value ? 1 : 0;
+            r.value.u32 = pValue ? 1 : 0;
             return r;
         }
 
-        static Resolution fromInt32(int32_t value) {
+        static Resolution fromInt32(int32_t pValue) {
             Resolution r;
             r.type = Type::Constant;
-            r.value.i32 = value;
+            r.value.i32 = pValue;
             return r;
         }
 
-        static Resolution fromUint32(uint32_t value) {
+        static Resolution fromUint32(uint32_t pValue) {
             Resolution r;
             r.type = Type::Constant;
-            r.value.u32 = value;
+            r.value.u32 = pValue;
             return r;
         }
     };
@@ -902,33 +902,33 @@ namespace respv {
         OptimizerContext() = delete;
     };
 
-    static void optimizerEliminateInstruction(uint32_t instructionIndex, OptimizerContext &c) {
-        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
-        uint32_t wordIndex = c.shader.instructions[instructionIndex].wordIndex;
+    static void optimizerEliminateInstruction(uint32_t pInstructionIndex, OptimizerContext &rContext) {
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(rContext.optimizedData.data());
+        uint32_t wordIndex = rContext.shader.instructions[pInstructionIndex].wordIndex;
         uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
         for (uint32_t j = 0; j < wordCount; j++) {
             optimizedWords[wordIndex + j] = UINT32_MAX;
         }
     }
 
-    static void optimizerReduceResultDegrees(OptimizerContext &c, std::vector<uint32_t> &resultStack) {
-        const uint32_t *optimizedWords = reinterpret_cast<const uint32_t *>(c.optimizedData.data());
-        while (!resultStack.empty()) {
-            uint32_t resultId = resultStack.back();
-            resultStack.pop_back();
+    static void optimizerReduceResultDegrees(OptimizerContext &rContext, std::vector<uint32_t> &rResultStack) {
+        const uint32_t *optimizedWords = reinterpret_cast<const uint32_t *>(rContext.optimizedData.data());
+        while (!rResultStack.empty()) {
+            uint32_t resultId = rResultStack.back();
+            rResultStack.pop_back();
 
-            uint32_t instructionIndex = c.shader.results[resultId].instructionIndex;
-            uint32_t wordIndex = c.shader.instructions[instructionIndex].wordIndex;
+            uint32_t instructionIndex = rContext.shader.results[resultId].instructionIndex;
+            uint32_t wordIndex = rContext.shader.instructions[instructionIndex].wordIndex;
 
             // Instruction's been deleted.
             if (optimizedWords[wordIndex] == UINT32_MAX) {
                 continue;
             }
 
-            c.instructionOutDegrees[instructionIndex]--;
+            rContext.instructionOutDegrees[instructionIndex]--;
 
             // When nothing uses the result from this instruction anymore, we can delete it. Push any operands it uses into the stack as well to reduce their out degrees.
-            if (c.instructionOutDegrees[instructionIndex] == 0) {
+            if (rContext.instructionOutDegrees[instructionIndex] == 0) {
                 SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
                 uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
                 uint32_t operandWordStart, operandWordCount, operandWordStride, operandWordSkip;
@@ -945,17 +945,18 @@ namespace respv {
                         }
 
                         uint32_t operandId = optimizedWords[wordIndex + operandWordIndex];
-                        resultStack.emplace_back(operandId);
+                        rResultStack.emplace_back(operandId);
                         operandWordIndex += operandWordStride;
                     }
                 }
 
-                optimizerEliminateInstruction(instructionIndex, c);
+                optimizerEliminateInstruction(instructionIndex, rContext);
             }
         }
     }
 
-    static bool optimizerPrepareData(OptimizerContext &c) {
+    static bool optimizerPrepareData(OptimizerContext &rContext) {
+        OptimizerContext &c = rContext;
         c.resolutions.clear();
         c.resolutions.resize(c.shader.results.size(), Resolution());
         c.instructionInDegrees.resize(c.shader.instructionInDegrees.size());
@@ -967,20 +968,20 @@ namespace respv {
         return true;
     }
 
-    static bool optimizerPatchSpecializationConstants(const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, OptimizerContext &c) {
-        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
-        for (uint32_t i = 0; i < newSpecConstantCount; i++) {
-            const SpecConstant &newSpecConstant = newSpecConstants[i];
-            if (newSpecConstant.specId >= c.shader.specializations.size()) {
+    static bool optimizerPatchSpecializationConstants(const SpecConstant *pNewSpecConstants, uint32_t pNewSpecConstantCount, OptimizerContext &rContext) {
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(rContext.optimizedData.data());
+        for (uint32_t i = 0; i < pNewSpecConstantCount; i++) {
+            const SpecConstant &newSpecConstant = pNewSpecConstants[i];
+            if (newSpecConstant.specId >= rContext.shader.specializations.size()) {
                 continue;
             }
 
-            const Specialization &specialization = c.shader.specializations[newSpecConstant.specId];
+            const Specialization &specialization = rContext.shader.specializations[newSpecConstant.specId];
             if (specialization.constantInstructionIndex == UINT32_MAX) {
                 continue;
             }
 
-            uint32_t constantWordIndex = c.shader.instructions[specialization.constantInstructionIndex].wordIndex;
+            uint32_t constantWordIndex = rContext.shader.instructions[specialization.constantInstructionIndex].wordIndex;
             SpvOp constantOpCode = SpvOp(optimizedWords[constantWordIndex] & 0xFFFFU);
             uint32_t constantWordCount = (optimizedWords[constantWordIndex] >> 16U) & 0xFFFFU;
             switch (constantOpCode) {
@@ -1008,24 +1009,24 @@ namespace respv {
             }
 
             // Eliminate the decorator instruction as well.
-            optimizerEliminateInstruction(specialization.decorationInstructionIndex, c);
+            optimizerEliminateInstruction(specialization.decorationInstructionIndex, rContext);
         }
 
         return true;
     }
 
-    static void optimizerEvaluateResult(uint32_t resultId, OptimizerContext &c) {
-        const uint32_t *optimizedWords = reinterpret_cast<const uint32_t *>(c.optimizedData.data());
-        const Result &result = c.shader.results[resultId];
-        Resolution &resolution = c.resolutions[resultId];
-        uint32_t resultWordIndex = c.shader.instructions[result.instructionIndex].wordIndex;
+    static void optimizerEvaluateResult(uint32_t pResultId, OptimizerContext &rContext) {
+        const uint32_t *optimizedWords = reinterpret_cast<const uint32_t *>(rContext.optimizedData.data());
+        const Result &result = rContext.shader.results[pResultId];
+        Resolution &resolution = rContext.resolutions[pResultId];
+        uint32_t resultWordIndex = rContext.shader.instructions[result.instructionIndex].wordIndex;
         SpvOp opCode = SpvOp(optimizedWords[resultWordIndex] & 0xFFFFU);
         uint32_t wordCount = (optimizedWords[resultWordIndex] >> 16U) & 0xFFFFU;
         switch (opCode) {
         case SpvOpConstant: {
             // Parse the known type of constants. Any other types will be considered as variable.
-            const Result &typeResult = c.shader.results[optimizedWords[resultWordIndex + 1]];
-            uint32_t typeWordIndex = c.shader.instructions[typeResult.instructionIndex].wordIndex;
+            const Result &typeResult = rContext.shader.results[optimizedWords[resultWordIndex + 1]];
+            uint32_t typeWordIndex = rContext.shader.instructions[typeResult.instructionIndex].wordIndex;
             SpvOp typeOpCode = SpvOp(optimizedWords[typeWordIndex] & 0xFFFFU);
             uint32_t typeWidthInBits = optimizedWords[typeWordIndex + 2];
             uint32_t typeSigned = optimizedWords[typeWordIndex + 3];
@@ -1050,181 +1051,181 @@ namespace respv {
             resolution = Resolution::fromBool(false);
             break;
         case SpvOpBitcast: {
-            const Resolution &operandResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &operandResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
             resolution = Resolution::fromUint32(operandResolution.value.u32);
             break;
         }
         case SpvOpIAdd: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromUint32(firstResolution.value.u32 + secondResolution.value.u32);
             break;
         }
         case SpvOpISub: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromUint32(firstResolution.value.u32 - secondResolution.value.u32);
             break;
         }
         case SpvOpIMul: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromUint32(firstResolution.value.u32 * secondResolution.value.u32);
             break;
         }
         case SpvOpUDiv: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromUint32(firstResolution.value.u32 / secondResolution.value.u32);
             break;
         }
         case SpvOpSDiv: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromUint32(firstResolution.value.i32 / secondResolution.value.i32);
             break;
         }
         case SpvOpLogicalEqual: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool((firstResolution.value.u32 != 0) == (secondResolution.value.u32 != 0));
             break;
         }
         case SpvOpLogicalNotEqual: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool((firstResolution.value.u32 != 0) != (secondResolution.value.u32 != 0));
             break;
         }
         case SpvOpLogicalOr: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool((firstResolution.value.u32 != 0) || (secondResolution.value.u32 != 0));
             break;
         }
         case SpvOpLogicalAnd: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool((firstResolution.value.u32 != 0) && (secondResolution.value.u32 != 0));
             break;
         }
         case SpvOpLogicalNot: {
-            const Resolution &operandResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &operandResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
             resolution = Resolution::fromBool(operandResolution.value.u32 == 0);
             break;
         }
         case SpvOpSelect: {
-            const Resolution &conditionResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 5]];
+            const Resolution &conditionResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 5]];
             resolution = (conditionResolution.value.u32 != 0) ? firstResolution : secondResolution;
             break;
         }
         case SpvOpIEqual: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool(firstResolution.value.u32 == secondResolution.value.u32);
             break;
         }
         case SpvOpINotEqual: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool(firstResolution.value.u32 != secondResolution.value.u32);
             break;
         }
         case SpvOpUGreaterThan: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool(firstResolution.value.u32 > secondResolution.value.u32);
             break;
         }
         case SpvOpSGreaterThan: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool(firstResolution.value.i32 > secondResolution.value.i32);
             break;
         }
         case SpvOpUGreaterThanEqual: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool(firstResolution.value.u32 >= secondResolution.value.u32);
             break;
         }
         case SpvOpSGreaterThanEqual: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool(firstResolution.value.i32 >= secondResolution.value.i32);
             break;
         }
         case SpvOpULessThan: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool(firstResolution.value.u32 < secondResolution.value.u32);
             break;
         }
         case SpvOpSLessThan: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool(firstResolution.value.i32 < secondResolution.value.i32);
             break;
         }
         case SpvOpULessThanEqual: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool(firstResolution.value.u32 <= secondResolution.value.u32);
             break;
         }
         case SpvOpSLessThanEqual: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromBool(firstResolution.value.i32 <= secondResolution.value.i32);
             break;
         }
         case SpvOpShiftRightLogical: {
-            const Resolution &baseResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &shiftResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &baseResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &shiftResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromUint32(baseResolution.value.u32 >> shiftResolution.value.u32);
             break;
         }
         case SpvOpShiftRightArithmetic: {
-            const Resolution &baseResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &shiftResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &baseResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &shiftResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromInt32(baseResolution.value.i32 >> shiftResolution.value.i32);
             break;
         }
         case SpvOpShiftLeftLogical: {
-            const Resolution &baseResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &shiftResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &baseResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &shiftResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromUint32(baseResolution.value.u32 << shiftResolution.value.u32);
             break;
         }
         case SpvOpBitwiseOr: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromUint32(firstResolution.value.u32 | secondResolution.value.u32);
             break;
         }
         case SpvOpBitwiseAnd: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromUint32(firstResolution.value.u32 & secondResolution.value.u32);
             break;
         }
         case SpvOpBitwiseXor: {
-            const Resolution &firstResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
-            const Resolution &secondResolution = c.resolutions[optimizedWords[resultWordIndex + 4]];
+            const Resolution &firstResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &secondResolution = rContext.resolutions[optimizedWords[resultWordIndex + 4]];
             resolution = Resolution::fromUint32(firstResolution.value.u32 ^ secondResolution.value.u32);
             break;
         }
         case SpvOpNot: {
-            const Resolution &operandResolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
+            const Resolution &operandResolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
             resolution = Resolution::fromUint32(~operandResolution.value.u32);
             break;
         }
         case SpvOpPhi: {
             // Resolve as constant if Phi operator was compacted to only one option.
             if (wordCount == 5) {
-                resolution = c.resolutions[optimizedWords[resultWordIndex + 3]];
+                resolution = rContext.resolutions[optimizedWords[resultWordIndex + 3]];
             }
             else {
                 resolution.type = Resolution::Type::Variable;
@@ -1239,35 +1240,35 @@ namespace respv {
         }
     }
 
-    static void optimizerReduceLabelDegree(uint32_t firstLabelId, OptimizerContext &c) {
+    static void optimizerReduceLabelDegree(uint32_t pFirstLabelId, OptimizerContext &rContext) {
         thread_local std::vector<uint32_t> labelStack;
         thread_local std::vector<uint32_t> resultStack;
         thread_local std::vector<uint32_t> degreeReductions;
-        labelStack.emplace_back(firstLabelId);
+        labelStack.emplace_back(pFirstLabelId);
         resultStack.clear();
         degreeReductions.clear();
 
-        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(rContext.optimizedData.data());
         while (!labelStack.empty()) {
             uint32_t labelId = labelStack.back();
             labelStack.pop_back();
 
-            uint32_t instructionIndex = c.shader.results[labelId].instructionIndex;
-            if (c.instructionInDegrees[instructionIndex] == 0) {
+            uint32_t instructionIndex = rContext.shader.results[labelId].instructionIndex;
+            if (rContext.instructionInDegrees[instructionIndex] == 0) {
                 continue;
             }
 
-            c.instructionInDegrees[instructionIndex]--;
+            rContext.instructionInDegrees[instructionIndex]--;
 
             // If a label's degree becomes 0, eliminate all the instructions of the block.
             // Eliminate as many instructions as possible until finding the terminator of the block.
             // When finding the terminator, look at the labels it has and push them to the stack to
             // reduce their degrees as well.
-            if (c.instructionInDegrees[instructionIndex] == 0) {
+            if (rContext.instructionInDegrees[instructionIndex] == 0) {
                 bool foundTerminator = false;
-                uint32_t instructionCount = c.shader.instructions.size();
+                uint32_t instructionCount = rContext.shader.instructions.size();
                 for (uint32_t i = instructionIndex; (i < instructionCount) && !foundTerminator; i++) {
-                    uint32_t wordIndex = c.shader.instructions[i].wordIndex;
+                    uint32_t wordIndex = rContext.shader.instructions[i].wordIndex;
                     if (optimizedWords[wordIndex] == UINT32_MAX) {
                         continue;
                     }
@@ -1304,19 +1305,19 @@ namespace respv {
                     }
 
                     foundTerminator = SpvOpIsTerminator(opCode);
-                    optimizerEliminateInstruction(i, c);
+                    optimizerEliminateInstruction(i, rContext);
                 }
             }
         }
 
-        optimizerReduceResultDegrees(c, resultStack);
+        optimizerReduceResultDegrees(rContext, resultStack);
     }
 
-    static void optimizerEvaluateTerminator(uint32_t instructionIndex, OptimizerContext &c) {
+    static void optimizerEvaluateTerminator(uint32_t pInstructionIndex, OptimizerContext &rContext) {
         // For each type of supported terminator, check if the operands can be resolved into constants.
         // If they can be resolved, eliminate any other branches that don't pass the condition.
-        uint32_t wordIndex = c.shader.instructions[instructionIndex].wordIndex;
-        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
+        uint32_t wordIndex = rContext.shader.instructions[pInstructionIndex].wordIndex;
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(rContext.optimizedData.data());
         SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
         uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
         uint32_t defaultLabelId = UINT32_MAX;
@@ -1324,7 +1325,7 @@ namespace respv {
         // Both instructions share that the second word is the operator they must use to resolve the condition.
         // Operator can't be anything but a constant to be able to resolve a terminator.
         const uint32_t operatorId = optimizedWords[wordIndex + 1];
-        const Resolution &operatorResolution = c.resolutions[operatorId];
+        const Resolution &operatorResolution = rContext.resolutions[operatorId];
         if (operatorResolution.type != Resolution::Type::Constant) {
             return;
         }
@@ -1333,11 +1334,11 @@ namespace respv {
             // Branch conditional only needs to choose either label depending on whether the result is true or false.
             if (operatorResolution.value.u32) {
                 defaultLabelId = optimizedWords[wordIndex + 2];
-                optimizerReduceLabelDegree(optimizedWords[wordIndex + 3], c);
+                optimizerReduceLabelDegree(optimizedWords[wordIndex + 3], rContext);
             }
             else {
                 defaultLabelId = optimizedWords[wordIndex + 3];
-                optimizerReduceLabelDegree(optimizedWords[wordIndex + 2], c);
+                optimizerReduceLabelDegree(optimizedWords[wordIndex + 2], rContext);
             }
 
             // If there's a selection merge before this branch, we place the unconditional branch in its place.
@@ -1347,7 +1348,7 @@ namespace respv {
 
             uint32_t patchWordIndex;
             if (mergeOpCode == SpvOpSelectionMerge) {
-                optimizerReduceLabelDegree(optimizedWords[mergeWordIndex + 1], c);
+                optimizerReduceLabelDegree(optimizedWords[mergeWordIndex + 1], rContext);
                 patchWordIndex = mergeWordIndex;
             }
             else {
@@ -1371,7 +1372,7 @@ namespace respv {
                     defaultLabelId = optimizedWords[wordIndex + i + 1];
                 }
                 else {
-                    optimizerReduceLabelDegree(optimizedWords[wordIndex + i + 1], c);
+                    optimizerReduceLabelDegree(optimizedWords[wordIndex + i + 1], rContext);
                 }
             }
 
@@ -1381,17 +1382,17 @@ namespace respv {
                 defaultLabelId = optimizedWords[wordIndex + 2];
             }
             else {
-                optimizerReduceLabelDegree(optimizedWords[wordIndex + 2], c);
+                optimizerReduceLabelDegree(optimizedWords[wordIndex + 2], rContext);
             }
 
             // Make the final label the new default case and reduce the word count.
             optimizedWords[wordIndex] = SpvOpSwitch | (3U << 16U);
-            optimizedWords[wordIndex + 1] = c.shader.defaultSwitchOpConstantInt;
+            optimizedWords[wordIndex + 1] = rContext.shader.defaultSwitchOpConstantInt;
             optimizedWords[wordIndex + 2] = defaultLabelId;
 
             // Increase the degree of the default constant that was chosen so it's not considered as dead code.
-            uint32_t defaultConstantInstructionIndex = c.shader.results[c.shader.defaultSwitchOpConstantInt].instructionIndex;
-            c.instructionOutDegrees[defaultConstantInstructionIndex]++;
+            uint32_t defaultConstantInstructionIndex = rContext.shader.results[rContext.shader.defaultSwitchOpConstantInt].instructionIndex;
+            rContext.instructionOutDegrees[defaultConstantInstructionIndex]++;
 
             // Eliminate any remaining words on the block.
             for (uint32_t i = wordIndex + 3; i < (wordIndex + wordCount); i++) {
@@ -1403,16 +1404,16 @@ namespace respv {
         thread_local std::vector<uint32_t> resultStack;
         resultStack.clear();
         resultStack.emplace_back(operatorId);
-        optimizerReduceResultDegrees(c, resultStack);
+        optimizerReduceResultDegrees(rContext, resultStack);
     }
 
-    static bool optimizerCompactPhi(uint32_t instructionIndex, OptimizerContext &c) {
+    static bool optimizerCompactPhi(uint32_t pInstructionIndex, OptimizerContext &rContext) {
         // Do a backwards search first to find out what label this instruction belongs to.
-        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
-        uint32_t searchInstructionIndex = instructionIndex;
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(rContext.optimizedData.data());
+        uint32_t searchInstructionIndex = pInstructionIndex;
         uint32_t instructionLabelId = UINT32_MAX;
         while (searchInstructionIndex > 0) {
-            uint32_t searchWordIndex = c.shader.instructions[searchInstructionIndex].wordIndex;
+            uint32_t searchWordIndex = rContext.shader.instructions[searchInstructionIndex].wordIndex;
             SpvOp searchOpCode = SpvOp(optimizedWords[searchWordIndex] & 0xFFFFU);
             if (searchOpCode == SpvOpLabel) {
                 instructionLabelId = optimizedWords[searchWordIndex + 1];
@@ -1430,14 +1431,14 @@ namespace respv {
         thread_local std::vector<uint32_t> resultStack;
         resultStack.clear();
 
-        uint32_t wordIndex = c.shader.instructions[instructionIndex].wordIndex;
+        uint32_t wordIndex = rContext.shader.instructions[pInstructionIndex].wordIndex;
         uint32_t wordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
         uint32_t newWordCount = 3;
-        uint32_t instructionCount = c.shader.instructions.size();
+        uint32_t instructionCount = rContext.shader.instructions.size();
         for (uint32_t i = 3; i < wordCount; i += 2) {
             uint32_t labelId = optimizedWords[wordIndex + i + 1];
-            uint32_t labelInstructionIndex = c.shader.results[labelId].instructionIndex;
-            uint32_t labelWordIndex = c.shader.instructions[labelInstructionIndex].wordIndex;
+            uint32_t labelInstructionIndex = rContext.shader.results[labelId].instructionIndex;
+            uint32_t labelWordIndex = rContext.shader.instructions[labelInstructionIndex].wordIndex;
 
             // Label's been eliminated. Skip it.
             if (optimizedWords[labelWordIndex] == UINT32_MAX) {
@@ -1448,7 +1449,7 @@ namespace respv {
             // While the label may not have been eliminated, verify its terminator is still pointing to this block.
             bool foundBranchToThisBlock = false;
             for (uint32_t j = labelInstructionIndex; j < instructionCount; j++) {
-                uint32_t searchWordIndex = c.shader.instructions[j].wordIndex;
+                uint32_t searchWordIndex = rContext.shader.instructions[j].wordIndex;
                 SpvOp searchOpCode = SpvOp(optimizedWords[searchWordIndex] & 0xFFFFU);
                 uint32_t searchWordCount = (optimizedWords[searchWordIndex] >> 16U) & 0xFFFFU;
                 if (SpvOpIsTerminator(searchOpCode)) {
@@ -1488,21 +1489,21 @@ namespace respv {
             optimizedWords[wordIndex + i] = UINT32_MAX;
         }
 
-        optimizerReduceResultDegrees(c, resultStack);
+        optimizerReduceResultDegrees(rContext, resultStack);
 
         return true;
     }
 
-    static bool optimizerRunEvaluationPass(OptimizerContext &c) {
-        if (!c.options.removeDeadCode) {
+    static bool optimizerRunEvaluationPass(OptimizerContext &rContext) {
+        if (!rContext.options.removeDeadCode) {
             return true;
         }
 
-        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
-        uint32_t orderCount = uint32_t(c.shader.instructionOrder.size());
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(rContext.optimizedData.data());
+        uint32_t orderCount = uint32_t(rContext.shader.instructionOrder.size());
         for (uint32_t i = 0; i < orderCount; i++) {
-            uint32_t instructionIndex = c.shader.instructionOrder[i];
-            uint32_t wordIndex = c.shader.instructions[instructionIndex].wordIndex;
+            uint32_t instructionIndex = rContext.shader.instructionOrder[i];
+            uint32_t wordIndex = rContext.shader.instructions[instructionIndex].wordIndex;
 
             // Instruction has been deleted.
             if (optimizedWords[wordIndex] == UINT32_MAX) {
@@ -1517,7 +1518,7 @@ namespace respv {
 
             if (hasResult) {
                 if (opCode == SpvOpPhi) {
-                    if (optimizerCompactPhi(instructionIndex, c)) {
+                    if (optimizerCompactPhi(instructionIndex, rContext)) {
                         patchedWordCount = (optimizedWords[wordIndex] >> 16U) & 0xFFFFU;
                     }
                     else {
@@ -1544,12 +1545,12 @@ namespace respv {
                         assert((operandId != UINT32_MAX) && "An operand that's been deleted shouldn't be getting evaluated.");
 
                         // It shouldn't be possible for an operand to not be solved, but OpPhi can do so because previous blocks might've been deleted.
-                        if ((opCode != SpvOpPhi) && (c.resolutions[operandId].type == Resolution::Type::Unknown)) {
+                        if ((opCode != SpvOpPhi) && (rContext.resolutions[operandId].type == Resolution::Type::Unknown)) {
                             fprintf(stderr, "Error in resolution of the operations. Operand %u was not solved.\n", operandId);
                             return false;
                         }
 
-                        if (c.resolutions[operandId].type == Resolution::Type::Variable) {
+                        if (rContext.resolutions[operandId].type == Resolution::Type::Variable) {
                             allOperandsAreConstant = false;
                             break;
                         }
@@ -1561,56 +1562,56 @@ namespace respv {
                 // The result can only be evaluated if all operands are constant.
                 uint32_t resultId = optimizedWords[wordIndex + (hasType ? 2 : 1)];
                 if (allOperandsAreConstant) {
-                    optimizerEvaluateResult(resultId, c);
+                    optimizerEvaluateResult(resultId, rContext);
                 }
                 else {
-                    c.resolutions[resultId].type = Resolution::Type::Variable;
+                    rContext.resolutions[resultId].type = Resolution::Type::Variable;
                 }
             }
             else if ((opCode == SpvOpBranchConditional) || (opCode == SpvOpSwitch)) {
-                optimizerEvaluateTerminator(instructionIndex, c);
+                optimizerEvaluateTerminator(instructionIndex, rContext);
             }
         }
 
         return true;
     }
 
-    static bool optimizerRemoveUnusedDecorations(OptimizerContext &c) {
-        if (!c.options.removeDeadCode) {
+    static bool optimizerRemoveUnusedDecorations(OptimizerContext &rContext) {
+        if (!rContext.options.removeDeadCode) {
             return true;
         }
 
-        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
-        for (Decoration decoration : c.shader.decorations) {
-            uint32_t wordIndex = c.shader.instructions[decoration.instructionIndex].wordIndex;
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(rContext.optimizedData.data());
+        for (Decoration decoration : rContext.shader.decorations) {
+            uint32_t wordIndex = rContext.shader.instructions[decoration.instructionIndex].wordIndex;
             uint32_t resultId = optimizedWords[wordIndex + 1];
             if (resultId == UINT32_MAX) {
                 // This decoration has already been deleted.
                 continue;
             }
 
-            uint32_t resultInstructionIndex = c.shader.results[resultId].instructionIndex;
-            uint32_t resultWordIndex = c.shader.instructions[resultInstructionIndex].wordIndex;
+            uint32_t resultInstructionIndex = rContext.shader.results[resultId].instructionIndex;
+            uint32_t resultWordIndex = rContext.shader.instructions[resultInstructionIndex].wordIndex;
 
             // The result has been deleted, so we delete the decoration as well.
             if (optimizedWords[resultWordIndex] == UINT32_MAX) {
-                optimizerEliminateInstruction(decoration.instructionIndex, c);
+                optimizerEliminateInstruction(decoration.instructionIndex, rContext);
             }
         }
 
         return true;
     }
 
-    static bool optimizerCompactPhis(OptimizerContext &c) {
-        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
-        for (Phi phi : c.shader.phis) {
-            uint32_t wordIndex = c.shader.instructions[phi.instructionIndex].wordIndex;
+    static bool optimizerCompactPhis(OptimizerContext &rContext) {
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(rContext.optimizedData.data());
+        for (Phi phi : rContext.shader.phis) {
+            uint32_t wordIndex = rContext.shader.instructions[phi.instructionIndex].wordIndex;
             if (optimizedWords[wordIndex] == UINT32_MAX) {
                 // This operation has already been deleted.
                 continue;
             }
 
-            if (!optimizerCompactPhi(phi.instructionIndex, c)) {
+            if (!optimizerCompactPhi(phi.instructionIndex, rContext)) {
                 return false;
             }
         }
@@ -1618,10 +1619,10 @@ namespace respv {
         return true;
     }
 
-    static bool optimizerCompactData(OptimizerContext &c) {
-        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
+    static bool optimizerCompactData(OptimizerContext &rContext) {
+        uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(rContext.optimizedData.data());
         uint32_t optimizedWordCount = 0;
-        uint32_t instructionCount = c.shader.instructions.size();
+        uint32_t instructionCount = rContext.shader.instructions.size();
 
         // Copy the header.
         const uint32_t startingWordIndex = 5;
@@ -1631,7 +1632,7 @@ namespace respv {
 
         // Write out all the words for all the instructions and skip any that were marked as deleted.
         for (uint32_t i = 0; i < instructionCount; i++) {
-            uint32_t wordIndex = c.shader.instructions[i].wordIndex;
+            uint32_t wordIndex = rContext.shader.instructions[i].wordIndex;
 
             // Instruction has been deleted.
             if (optimizedWords[wordIndex] == UINT32_MAX) {
@@ -1640,7 +1641,7 @@ namespace respv {
 
             // Check if the instruction should be ignored.
             SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
-            if (c.options.removeDeadCode && SpvIsIgnored(opCode)) {
+            if (rContext.options.removeDeadCode && SpvIsIgnored(opCode)) {
                 continue;
             }
 
@@ -1651,29 +1652,29 @@ namespace respv {
             }
         }
 
-        c.optimizedData.resize(optimizedWordCount * sizeof(uint32_t));
+        rContext.optimizedData.resize(optimizedWordCount * sizeof(uint32_t));
 
         return true;
     }
 
-    bool Optimizer::run(const Shader &shader, const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData, Options options) {
+    bool Optimizer::run(const Shader &pShader, const SpecConstant *pNewSpecConstants, uint32_t pNewSpecConstantCount, std::vector<uint8_t> &pOptimizedData, Options pOptions) {
         thread_local std::vector<uint32_t> instructionInDegrees;
         thread_local std::vector<uint32_t> instructionOutDegrees;
         thread_local std::vector<Resolution> resolutions;
-        OptimizerContext c = { shader, instructionInDegrees, instructionOutDegrees, resolutions, optimizedData, options };
-        if (!optimizerPrepareData(c)) {
+        OptimizerContext context = { pShader, instructionInDegrees, instructionOutDegrees, resolutions, pOptimizedData, pOptions };
+        if (!optimizerPrepareData(context)) {
             return false;
         }
 
-        if (!optimizerPatchSpecializationConstants(newSpecConstants, newSpecConstantCount, c)) {
+        if (!optimizerPatchSpecializationConstants(pNewSpecConstants, pNewSpecConstantCount, context)) {
             return false;
         }
 
-        if (!optimizerRunEvaluationPass(c)) {
+        if (!optimizerRunEvaluationPass(context)) {
             return false;
         }
 
-        if (!optimizerRemoveUnusedDecorations(c)) {
+        if (!optimizerRemoveUnusedDecorations(context)) {
             return false;
         }
 
@@ -1681,11 +1682,11 @@ namespace respv {
         // before all their preceding blocks have been evaluated in time whether they should be deleted or not.
         // This pass merely re-runs the compaction step as a safeguard to remove any stale references. There's
         // potential for further optimization if this is fixed properly.
-        if (!optimizerCompactPhis(c)) {
+        if (!optimizerCompactPhis(context)) {
             return false;
         }
 
-        if (!optimizerCompactData(c)) {
+        if (!optimizerCompactData(context)) {
             return false;
         }
 

@@ -19,9 +19,9 @@ namespace respv {
             // Empty constructor.
         }
 
-        SpecConstant(uint32_t specId, const std::vector<uint32_t> &values) {
-            this->specId = specId;
-            this->values = values;
+        SpecConstant(uint32_t pSpecId, const std::vector<uint32_t> &pValues) {
+            specId = pSpecId;
+            values = pValues;
         }
     };
 
@@ -29,8 +29,8 @@ namespace respv {
         uint32_t wordIndex = UINT32_MAX;
         uint32_t adjacentListIndex = UINT32_MAX;
 
-        Instruction(uint32_t wordIndex) {
-            this->wordIndex = wordIndex;
+        Instruction(uint32_t pWordIndex) {
+            wordIndex = pWordIndex;
         }
     };
 
@@ -41,8 +41,8 @@ namespace respv {
             // Empty.
         }
 
-        Result(uint32_t instructionIndex) {
-            this->instructionIndex = instructionIndex;
+        Result(uint32_t pInstructionIndex) {
+            instructionIndex = pInstructionIndex;
         }
     };
 
@@ -54,9 +54,9 @@ namespace respv {
             // Empty.
         }
 
-        Specialization(uint32_t constantInstructionIndex, uint32_t decorationInstructionIndex) {
-            this->constantInstructionIndex = constantInstructionIndex;
-            this->decorationInstructionIndex = decorationInstructionIndex;
+        Specialization(uint32_t pConstantInstructionIndex, uint32_t pDecorationInstructionIndex) {
+            constantInstructionIndex = pConstantInstructionIndex;
+            decorationInstructionIndex = pDecorationInstructionIndex;
         }
     };
 
@@ -67,8 +67,8 @@ namespace respv {
             // Empty.
         }
 
-        Decoration(uint32_t instructionIndex) {
-            this->instructionIndex = instructionIndex;
+        Decoration(uint32_t pInstructionIndex) {
+            instructionIndex = pInstructionIndex;
         }
     };
 
@@ -79,8 +79,8 @@ namespace respv {
             // Empty.
         }
 
-        Phi(uint32_t instructionIndex) {
-            this->instructionIndex = instructionIndex;
+        Phi(uint32_t pInstructionIndex) {
+            instructionIndex = pInstructionIndex;
         }
     };
 
@@ -88,9 +88,9 @@ namespace respv {
         uint32_t instructionIndex = UINT32_MAX;
         uint32_t nextListIndex = UINT32_MAX;
 
-        ListNode(uint32_t instructionIndex, uint32_t nextListIndex) {
-            this->instructionIndex = instructionIndex;
-            this->nextListIndex = nextListIndex;
+        ListNode(uint32_t pInstructionIndex, uint32_t pNextListIndex) {
+            instructionIndex = pInstructionIndex;
+            nextListIndex = pNextListIndex;
         }
     };
 
@@ -109,11 +109,11 @@ namespace respv {
         uint32_t defaultSwitchOpConstantInt = UINT32_MAX;
 
         Shader();
-        Shader(const void *data, size_t size);
+        Shader(const void *pData, size_t pSize);
         void clear();
-        uint32_t addToList(uint32_t instructionIndex, uint32_t listIndex);
-        bool parseWords(const void *data, size_t size);
-        bool parse(const void *data, size_t size);
+        uint32_t addToList(uint32_t pInstructionIndex, uint32_t pListIndex);
+        bool parseWords(const void *pData, size_t pSize);
+        bool parse(const void *pData, size_t pSize);
         bool process();
         bool sort();
         bool empty() const;
@@ -124,6 +124,6 @@ namespace respv {
     };
 
     struct Optimizer {
-        static bool run(const Shader &shader, const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData, Options options = Options());
+        static bool run(const Shader &pShader, const SpecConstant *pNewSpecConstants, uint32_t pNewSpecConstantCount, std::vector<uint8_t> &pOptimizedData, Options pOptions = Options());
     };
 };
