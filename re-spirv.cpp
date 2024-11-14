@@ -35,6 +35,7 @@ namespace respv {
         case SpvOpTypeInt:
         case SpvOpTypeFloat:
         case SpvOpTypeVector:
+        case SpvOpTypeMatrix:
         case SpvOpTypeImage:
         case SpvOpTypeSampler:
         case SpvOpTypeSampledImage:
@@ -50,7 +51,9 @@ namespace respv {
         case SpvOpConstantNull:
         case SpvOpSpecConstant:
         case SpvOpFunction:
+        case SpvOpFunctionParameter:
         case SpvOpFunctionEnd:
+        case SpvOpFunctionCall:
         case SpvOpVariable:
         case SpvOpLoad:
         case SpvOpStore:
@@ -62,9 +65,22 @@ namespace respv {
         case SpvOpCompositeExtract:
         case SpvOpCompositeInsert:
         case SpvOpCopyObject:
+        case SpvOpTranspose:
         case SpvOpSampledImage:
+        case SpvOpImageSampleImplicitLod:
         case SpvOpImageSampleExplicitLod:
+        case SpvOpImageSampleDrefImplicitLod:
+        case SpvOpImageSampleDrefExplicitLod:
+        case SpvOpImageSampleProjImplicitLod:
+        case SpvOpImageSampleProjExplicitLod:
+        case SpvOpImageSampleProjDrefImplicitLod:
+        case SpvOpImageSampleProjDrefExplicitLod:
         case SpvOpImageFetch:
+        case SpvOpImageGather:
+        case SpvOpImageDrefGather:
+        case SpvOpImageRead:
+        case SpvOpImageWrite:
+        case SpvOpImage:
         case SpvOpImageQuerySizeLod:
         case SpvOpImageQueryLevels:
         case SpvOpConvertFToU:
@@ -99,6 +115,7 @@ namespace respv {
         case SpvOpISubBorrow:
         case SpvOpUMulExtended:
         case SpvOpSMulExtended:
+        case SpvOpAny:
         case SpvOpAll:
         case SpvOpLogicalEqual:
         case SpvOpLogicalNotEqual:
@@ -135,9 +152,16 @@ namespace respv {
         case SpvOpBitwiseXor:
         case SpvOpBitwiseAnd:
         case SpvOpNot:
+        case SpvOpBitFieldInsert:
+        case SpvOpBitFieldSExtract:
+        case SpvOpBitFieldUExtract:
+        case SpvOpBitReverse:
+        case SpvOpBitCount:
         case SpvOpDPdx:
         case SpvOpDPdy:
+        case SpvOpFwidth:
         case SpvOpPhi:
+        case SpvOpLoopMerge:
         case SpvOpSelectionMerge:
         case SpvOpLabel:
         case SpvOpBranch:
@@ -145,7 +169,9 @@ namespace respv {
         case SpvOpSwitch:
         case SpvOpKill:
         case SpvOpReturn:
+        case SpvOpReturnValue:
         case SpvOpUnreachable:
+        case SpvOpCopyLogical:
             return true;
         default:
             return false;
@@ -170,6 +196,7 @@ namespace respv {
         case SpvOpMemberDecorate:
         case SpvOpBranchConditional:
         case SpvOpSwitch:
+        case SpvOpReturnValue:
             operandWordStart = 1;
             operandWordCount = 1;
             operandWordStride = 1;
@@ -219,6 +246,8 @@ namespace respv {
         case SpvOpLoad:
         case SpvOpCompositeExtract:
         case SpvOpCopyObject:
+        case SpvOpTranspose:
+        case SpvOpImage:
         case SpvOpImageQueryLevels:
         case SpvOpConvertFToU:
         case SpvOpConvertFToS:
@@ -227,11 +256,16 @@ namespace respv {
         case SpvOpBitcast:
         case SpvOpSNegate:
         case SpvOpFNegate:
+        case SpvOpAny:
         case SpvOpAll:
         case SpvOpLogicalNot:
         case SpvOpNot:
+        case SpvOpBitReverse:
+        case SpvOpBitCount:
         case SpvOpDPdx:
         case SpvOpDPdy:
+        case SpvOpFwidth:
+        case SpvOpCopyLogical:
             operandWordStart = 3;
             operandWordCount = 1;
             operandWordStride = 1;
@@ -306,13 +340,23 @@ namespace respv {
             operandWordSkipString = false;
             return true;
         case SpvOpSelect:
+        case SpvOpBitFieldSExtract:
+        case SpvOpBitFieldUExtract:
             operandWordStart = 3;
             operandWordCount = 3;
             operandWordStride = 1;
             operandWordSkip = UINT32_MAX;
             operandWordSkipString = false;
             return true;
+        case SpvOpBitFieldInsert:
+            operandWordStart = 3;
+            operandWordCount = 4;
+            operandWordStride = 1;
+            operandWordSkip = UINT32_MAX;
+            operandWordSkipString = false;
+            return true;
         case SpvOpConstantComposite:
+        case SpvOpFunctionCall:
         case SpvOpAccessChain:
         case SpvOpCompositeConstruct:
             operandWordStart = 3;
@@ -328,12 +372,35 @@ namespace respv {
             operandWordSkip = 1;
             operandWordSkipString = false;
             return true;
+        case SpvOpImageWrite:
+            operandWordStart = 1;
+            operandWordCount = UINT32_MAX;
+            operandWordStride = 1;
+            operandWordSkip = 3;
+            operandWordSkipString = false;
+            return true;
+        case SpvOpImageSampleImplicitLod:
         case SpvOpImageSampleExplicitLod:
+        case SpvOpImageSampleProjImplicitLod:
+        case SpvOpImageSampleProjExplicitLod:
         case SpvOpImageFetch:
+        case SpvOpImageRead:
             operandWordStart = 3;
             operandWordCount = UINT32_MAX;
             operandWordStride = 1;
             operandWordSkip = 2;
+            operandWordSkipString = false;
+            return true;
+        case SpvOpImageSampleDrefImplicitLod:
+        case SpvOpImageSampleDrefExplicitLod:
+        case SpvOpImageSampleProjDrefImplicitLod:
+        case SpvOpImageSampleProjDrefExplicitLod:
+        case SpvOpImageGather:
+        case SpvOpImageDrefGather:
+            operandWordStart = 3;
+            operandWordCount = UINT32_MAX;
+            operandWordStride = 1;
+            operandWordSkip = 3;
             operandWordSkipString = false;
             return true;
         case SpvOpPhi:
@@ -362,6 +429,11 @@ namespace respv {
         case SpvOpBranch:
             labelWordStart = 1;
             labelWordCount = 1;
+            labelWordStride = 1;
+            return true;
+        case SpvOpLoopMerge:
+            labelWordStart = 1;
+            labelWordCount = 2;
             labelWordStride = 1;
             return true;
         case SpvOpBranchConditional:
@@ -398,7 +470,7 @@ namespace respv {
         if (relativeWordIndex == operandWordSkip) {
             if (operandWordSkipString) {
                 const char *operandString = reinterpret_cast<const char *>(&spirvWords[wordIndex + operandWordIndex]);
-                uint32_t stringLengthInWords = (strlen(operandString) + sizeof(uint32_t) - 1) / sizeof(uint32_t);
+                uint32_t stringLengthInWords = (strlen(operandString) + sizeof(uint32_t)) / sizeof(uint32_t);
                 operandWordIndex += stringLengthInWords;
             }
             else {
@@ -504,6 +576,7 @@ namespace respv {
     }
 
     bool Shader::process() {
+        bool foundOpSwitch = false;
         for (uint32_t i = 0; i < uint32_t(instructions.size()); i++) {
             uint32_t wordIndex = instructions[i].wordIndex;
             SpvOp opCode = SpvOp(spirvWords[wordIndex] & 0xFFFFU);
@@ -632,9 +705,13 @@ namespace respv {
                     specializations[constantId].decorationInstructionIndex = i;
                 }
             }
+            // Check if a switch is used in the shader.
+            else if (opCode == SpvOpSwitch) {
+                foundOpSwitch = true;
+            }
         }
 
-        if (defaultSwitchOpConstantInt == UINT32_MAX) {
+        if (foundOpSwitch && (defaultSwitchOpConstantInt == UINT32_MAX)) {
             fprintf(stderr, "Unable to find an OpConstantInt to use as replacement for switches. Adding this instruction automatically is not supported yet.\n");
             return false;
         }
@@ -817,6 +894,7 @@ namespace respv {
         std::vector<uint32_t> &instructionOutDegrees;
         std::vector<Resolution> &resolutions;
         std::vector<uint8_t> &optimizedData;
+        Options options;
 
         OptimizerContext() = delete;
     };
@@ -1413,6 +1491,10 @@ namespace respv {
     }
 
     static bool optimizerRunEvaluationPass(OptimizerContext &c) {
+        if (!c.options.removeDeadCode) {
+            return true;
+        }
+
         uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
         uint32_t orderCount = uint32_t(c.shader.instructionOrder.size());
         for (uint32_t i = 0; i < orderCount; i++) {
@@ -1491,6 +1573,10 @@ namespace respv {
     }
 
     static bool optimizerRemoveUnusedDecorations(OptimizerContext &c) {
+        if (!c.options.removeDeadCode) {
+            return true;
+        }
+
         uint32_t *optimizedWords = reinterpret_cast<uint32_t *>(c.optimizedData.data());
         for (Decoration decoration : c.shader.decorations) {
             uint32_t wordIndex = c.shader.instructions[decoration.instructionIndex].wordIndex;
@@ -1551,7 +1637,7 @@ namespace respv {
 
             // Check if the instruction should be ignored.
             SpvOp opCode = SpvOp(optimizedWords[wordIndex] & 0xFFFFU);
-            if (SpvIsIgnored(opCode)) {
+            if (c.options.removeDeadCode && SpvIsIgnored(opCode)) {
                 continue;
             }
 
@@ -1567,11 +1653,11 @@ namespace respv {
         return true;
     }
 
-    bool Optimizer::run(const Shader &shader, const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData) {
+    bool Optimizer::run(const Shader &shader, const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData, Options options) {
         thread_local std::vector<uint32_t> instructionInDegrees;
         thread_local std::vector<uint32_t> instructionOutDegrees;
         thread_local std::vector<Resolution> resolutions;
-        OptimizerContext c = { shader, instructionInDegrees, instructionOutDegrees, resolutions, optimizedData };
+        OptimizerContext c = { shader, instructionInDegrees, instructionOutDegrees, resolutions, optimizedData, options };
         if (!optimizerPrepareData(c)) {
             return false;
         }

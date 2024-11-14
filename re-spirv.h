@@ -116,7 +116,11 @@ namespace respv {
         bool empty() const;
     };
 
+    struct Options {
+        bool removeDeadCode = true;
+    };
+
     struct Optimizer {
-        static bool run(const Shader &shader, const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData);
+        static bool run(const Shader &shader, const SpecConstant *newSpecConstants, uint32_t newSpecConstantCount, std::vector<uint8_t> &optimizedData, Options options = Options());
     };
 };
